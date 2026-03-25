@@ -1,0 +1,90 @@
+package com.freightflow.modules.vessel;
+
+import jakarta.persistence.*;
+import com.freightflow.modules.voyage.Voyage;
+import com.freightflow.modules.vessel.enums.VesselType;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.time.Instant;
+
+@Entity
+@Table(name = "vessels")
+public class Vessel {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(nullable = false, unique = true, length = 7)
+    private String imo;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false, length = 2)
+    private String flag;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private VesselType type;
+
+    @Column(nullable = false)
+    private Integer capacityTeu;
+
+    @OneToMany(mappedBy = "vessel", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Voyage> voyages = new ArrayList<>();
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @Column(nullable = false)
+    private Instant updatedAt;
+
+    protected Vessel() {}
+
+    public Vessel(String imo, String name, String flag, VesselType type, Integer capacityTeu) {
+        this.imo = imo;
+        this.name = name;
+        this.flag = flag;
+        this.type = type;
+        this.capacityTeu = capacityTeu;
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public String getImo() {
+        return imo;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getFlag() {
+        return flag;
+    }
+
+    public VesselType getType() {
+        return type;
+    }
+
+    public Integer getCapacityTeu() {
+        return capacityTeu;
+    }
+
+    public List<Voyage> getVoyages() {
+        return voyages;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+}

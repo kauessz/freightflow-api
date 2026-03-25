@@ -1,0 +1,276 @@
+Listagem de caminhos de pasta
+O n£mero de s‚rie do volume ‚ 7A5C-89E0
+C:.
+|   .env.example
+|   .gitignore
+|   CHANGELOG.md
+|   docker-compose.test.yml
+|   docker-compose.yml
+|   estrutura.txt
+|   pom.xml
+|   README.md
+|   
++---.github
+|   \---workflows
+|           ci.yml
+|           
++---.idea
+|       .gitignore
+|       compiler.xml
+|       encodings.xml
+|       jarRepositories.xml
+|       misc.xml
+|       workspace.xml
+|       
++---docker
+|       Dockerfile
+|       
++---ff
+|   |   SKILL_UPDATED.md
+|   |   
+|   +---.github
+|   |   \---workflows
+|   +---docker
+|   \---src
+|       +---main
+|       |   +---java
+|       |   |   \---com
+|       |   |       \---freightflow
+|       |   |           +---config
+|       |   |           +---infrastructure
+|       |   |           |   +---external
+|       |   |           |   \---messaging
+|       |   |           +---modules
+|       |   |           |   +---alert
+|       |   |           |   |   |   Alert.java
+|       |   |           |   |   |   
+|       |   |           |   |   \---enums
+|       |   |           |   |           AlertType.java
+|       |   |           |   |           Severity.java
+|       |   |           |   |           
+|       |   |           |   +---analytics
+|       |   |           |   |   \---dto
+|       |   |           |   +---auth
+|       |   |           |   |   |   ApiKey.java
+|       |   |           |   |   |   Tenant.java
+|       |   |           |   |   |   User.java
+|       |   |           |   |   |   
+|       |   |           |   |   \---dto
+|       |   |           |   +---billing
+|       |   |           |   |   \---dto
+|       |   |           |   +---event
+|       |   |           |   |   |   Event.java
+|       |   |           |   |   |   
+|       |   |           |   |   \---enums
+|       |   |           |   |           EventType.java
+|       |   |           |   |           
+|       |   |           |   +---port
+|       |   |           |   |   |   Port.java
+|       |   |           |   |   |   
+|       |   |           |   |   \---dto
+|       |   |           |   +---shipment
+|       |   |           |   |   |   Shipment.java
+|       |   |           |   |   |   
+|       |   |           |   |   +---dto
+|       |   |           |   |   \---enums
+|       |   |           |   |           ContainerType.java
+|       |   |           |   |           ShipmentStatus.java
+|       |   |           |   |           
+|       |   |           |   +---vessel
+|       |   |           |   |   |   Vessel.java
+|       |   |           |   |   |   
+|       |   |           |   |   \---enums
+|       |   |           |   |           VesselType.java
+|       |   |           |   |           
+|       |   |           |   +---voyage
+|       |   |           |   |   |   Voyage.java
+|       |   |           |   |   |   
+|       |   |           |   |   \---enums
+|       |   |           |   |           VoyageStatus.java
+|       |   |           |   |           
+|       |   |           |   \---webhook
+|       |   |           |       |   WebhookSubscription.java
+|       |   |           |       |   
+|       |   |           |       \---dto
+|       |   |           \---shared
+|       |   |               +---exception
+|       |   |               +---pagination
+|       |   |               +---security
+|       |   |               \---util
+|       |   \---resources
+|       |       \---db
+|       |           \---migration
+|       |                   V10__seed_ports_unlocode.sql
+|       |                   V1__create_tenants_table.sql
+|       |                   V2__create_ports_table.sql
+|       |                   V3__create_vessels_table.sql
+|       |                   V4__create_voyages_table.sql
+|       |                   V5__create_shipments_table.sql
+|       |                   V6__create_events_table.sql
+|       |                   V7__create_alerts_table.sql
+|       |                   V8__create_users_and_api_keys_tables.sql
+|       |                   V9__create_webhook_subscriptions_table.sql
+|       |                   
+|       \---test
+|           \---java
+|               \---com
+|                   \---freightflow
+|                       +---integration
+|                       +---modules
+|                       |   \---shipment
+|                       \---util
++---newtest
+|       hello.txt
+|       
++---src
+|   +---main
+|   |   +---java
+|   |   |   \---com
+|   |   |       \---freightflow
+|   |   |           |   FreightFlowApplication.java
+|   |   |           |   test.txt
+|   |   |           |   
+|   |   |           +---config
+|   |   |           +---infrastructure
+|   |   |           |   +---external
+|   |   |           |   \---messaging
+|   |   |           +---modules
+|   |   |           |   +---alert
+|   |   |           |   |   |   Alert.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   +---enums
+|   |   |           |   |   |       AlertType.java
+|   |   |           |   |   |       Severity.java
+|   |   |           |   |   |       
+|   |   |           |   |   +---repository
+|   |   |           |   |   \---service
+|   |   |           |   +---analytics
+|   |   |           |   |   \---dto
+|   |   |           |   +---auth
+|   |   |           |   |   |   ApiKey.java
+|   |   |           |   |   |   Tenant.java
+|   |   |           |   |   |   TenantRepository.java
+|   |   |           |   |   |   User.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   +---enums
+|   |   |           |   |   +---repository
+|   |   |           |   |   \---service
+|   |   |           |   +---billing
+|   |   |           |   |   \---dto
+|   |   |           |   +---event
+|   |   |           |   |   |   Event.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   +---enums
+|   |   |           |   |   |       EventType.java
+|   |   |           |   |   |       
+|   |   |           |   |   +---repository
+|   |   |           |   |   \---service
+|   |   |           |   +---port
+|   |   |           |   |   |   Port.java
+|   |   |           |   |   |   PortRepository.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   +---enums
+|   |   |           |   |   +---repository
+|   |   |           |   |   \---service
+|   |   |           |   +---shipment
+|   |   |           |   |   |   Shipment.java
+|   |   |           |   |   |   ShipmentController.java
+|   |   |           |   |   |   TrackingController.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   |       CreateShipmentRequest.java
+|   |   |           |   |   |       ShipmentResponse.java
+|   |   |           |   |   |       TrackingResponse.java
+|   |   |           |   |   |       UpdateShipmentRequest.java
+|   |   |           |   |   |       
+|   |   |           |   |   +---enums
+|   |   |           |   |   |       ContainerType.java
+|   |   |           |   |   |       ShipmentStatus.java
+|   |   |           |   |   |       
+|   |   |           |   |   +---repository
+|   |   |           |   |   |       ShipmentRepository.java
+|   |   |           |   |   |       
+|   |   |           |   |   \---service
+|   |   |           |   |           ShipmentService.java
+|   |   |           |   |           
+|   |   |           |   +---vessel
+|   |   |           |   |   |   Vessel.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   +---enums
+|   |   |           |   |   |       VesselType.java
+|   |   |           |   |   |       
+|   |   |           |   |   +---repository
+|   |   |           |   |   \---service
+|   |   |           |   +---voyage
+|   |   |           |   |   |   Voyage.java
+|   |   |           |   |   |   VoyageRepository.java
+|   |   |           |   |   |   
+|   |   |           |   |   +---dto
+|   |   |           |   |   +---enums
+|   |   |           |   |   |       VoyageStatus.java
+|   |   |           |   |   |       
+|   |   |           |   |   +---repository
+|   |   |           |   |   \---service
+|   |   |           |   \---webhook
+|   |   |           |       |   WebhookSubscription.java
+|   |   |           |       |   
+|   |   |           |       \---dto
+|   |   |           \---shared
+|   |   |               +---exception
+|   |   |               |       BusinessException.java
+|   |   |               |       GlobalExceptionHandler.java
+|   |   |               |       ResourceNotFoundException.java
+|   |   |               |       UnauthorizedException.java
+|   |   |               |       
+|   |   |               +---pagination
+|   |   |               |       PageResponse.java
+|   |   |               |       
+|   |   |               +---security
+|   |   |               |       UserPrincipal.java
+|   |   |               |       
+|   |   |               \---util
+|   |   \---resources
+|   |       |   application.yml
+|   |       |   
+|   |       \---db
+|   |           \---migration
+|   |                   V10__seed_ports_unlocode.sql
+|   |                   V1__create_tenants_table.sql
+|   |                   V2__create_ports_table.sql
+|   |                   V3__create_vessels_table.sql
+|   |                   V4__create_voyages_table.sql
+|   |                   V5__create_shipments_table.sql
+|   |                   V6__create_events_table.sql
+|   |                   V7__create_alerts_table.sql
+|   |                   V8__create_users_and_api_keys_tables.sql
+|   |                   V9__create_webhook_subscriptions_table.sql
+|   |                   
+|   \---test
+|       \---java
+|           \---com
+|               \---freightflow
+|                   +---integration
+|                   +---modules
+|                   |   \---shipment
+|                   \---util
+\---src_old
+    +---main
+    |   +---java
+    |   |   \---com
+    |   |       \---freightflow
+    |   |               FreightFlowApplication.java
+    |   |               
+    |   \---resources
+    |       |   application.yml
+    |       |   
+    |       \---db
+    |           \---migration
+    \---test
+        \---java
+            \---com
+                \---freightflow
