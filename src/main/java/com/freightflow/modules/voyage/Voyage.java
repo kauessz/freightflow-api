@@ -79,7 +79,7 @@ public class Voyage {
 
     public boolean isDelayed() {
         if (atd == null) return etd.isBefore(Instant.now());
-        if (ata == null) return ata.isAfter(eta);
+        if (ata == null) return eta.isBefore(Instant.now());
         return ata.isAfter(eta);
     }
 

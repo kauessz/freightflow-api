@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "freightflow.jwt")
 public class JwtProperties {
 
-    private String secret = "dev-secret-key-change-in-production";
+    private String secret = "freightflow-dev-secret-key-minimum-32-bytes-long!!";
     private long expirationMs = 86_400_000; // 24h
     private long refreshExpirationMs = 604_800_000; // 7d
 
