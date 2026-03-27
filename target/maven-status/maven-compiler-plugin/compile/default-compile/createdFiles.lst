@@ -1,7 +1,9 @@
 com\freightflow\config\OpenApiConfig.class
+com\freightflow\modules\csvimport\dto\ImportResult$ImportError.class
 com\freightflow\modules\voyage\Voyage.class
 com\freightflow\modules\vessel\Vessel.class
 com\freightflow\modules\port\Port.class
+com\freightflow\modules\csvimport\ImportService.class
 com\freightflow\modules\auth\dto\UserResponse.class
 com\freightflow\shared\exception\UnauthorizedException.class
 com\freightflow\modules\event\EventController.class
@@ -9,6 +11,7 @@ com\freightflow\modules\shipment\TrackingController.class
 com\freightflow\modules\event\dto\EventResponse.class
 com\freightflow\modules\voyage\VoyageRepository.class
 com\freightflow\modules\auth\AuthService.class
+com\freightflow\modules\csvimport\ImportController.class
 com\freightflow\config\CorsProperties.class
 com\freightflow\modules\auth\ApiKey.class
 com\freightflow\modules\auth\User.class
@@ -22,6 +25,7 @@ com\freightflow\shared\exception\ResourceNotFoundException.class
 com\freightflow\modules\alert\enums\AlertType.class
 com\freightflow\modules\shipment\service\ShipmentService.class
 com\freightflow\shared\security\UserPrincipal.class
+com\freightflow\modules\csvimport\dto\ImportResult.class
 com\freightflow\modules\event\EventRepository.class
 com\freightflow\modules\auth\TenantRepository.class
 com\freightflow\modules\port\dto\PortResponse.class
@@ -37,10 +41,12 @@ com\freightflow\modules\port\PortService.class
 com\freightflow\modules\shipment\enums\ContainerType.class
 com\freightflow\shared\exception\BusinessException.class
 com\freightflow\modules\auth\dto\AuthResponse.class
+com\freightflow\modules\csvimport\dto\ImportResult$ImportedShipment.class
 com\freightflow\modules\shipment\enums\ShipmentStatus.class
 com\freightflow\config\JwtProperties.class
 com\freightflow\modules\auth\User$UserRole.class
 com\freightflow\modules\vessel\VesselController.class
+com\freightflow\modules\csvimport\dto\CsvShipmentRow.class
 com\freightflow\modules\vessel\dto\VesselResponse.class
 com\freightflow\modules\webhook\WebhookSubscription.class
 com\freightflow\modules\voyage\dto\VoyageResponse.class

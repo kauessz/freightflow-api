@@ -1,0 +1,5 @@
+booking,containerNumber,containerType,voyageNumber,originUnlocode,destinationUnlocode,shipper,consignee
+A111111111,MSCU1111111,TEU40,MSC-2026-001,BRSSZ,NLRTM,Exportador BR,Importador NL
+B222222222,CMAU2222222,TEU40HC,CMA-2026-042,NLRTM,CNSHA,Dutch Co,Shanghai Ltd
+C333333333,HPLU3333333,REEFER40,CAP-2026-015,BRSSZ,ARBUE,Fresh Fruits BR,BA Distributor
+Z999999999,XXXX123,TEU40,FAKE-001,BRSSZ,NLRTM,Test,Test

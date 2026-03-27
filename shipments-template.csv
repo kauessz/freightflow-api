@@ -1,0 +1,4 @@
+booking,containerNumber,containerType,voyageNumber,originUnlocode,destinationUnlocode,shipper,consignee
+A123456789,MSCU1234567,TEU40,MSC-2026-001,BRSSZ,NLRTM,Brazil Exports Ltda,European Imports BV
+B987654321,CMAU7654321,TEU40HC,CMA-2026-042,NLRTM,CNSHA,Dutch Trading Co,Shanghai Logistics
+C111222333,MAEU9876543,REEFER40,MAE-2026-088,SGSIN,BRSSZ,Singapore Fresh Ltd,Importadora Santos

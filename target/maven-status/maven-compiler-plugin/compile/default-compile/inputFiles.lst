@@ -18,6 +18,10 @@ C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\au
 C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\auth\TenantRepository.java
 C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\auth\User.java
 C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\auth\UserRepository.java
+C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\csvimport\dto\CsvShipmentRow.java
+C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\csvimport\dto\ImportResult.java
+C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\csvimport\ImportController.java
+C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\csvimport\ImportService.java
 C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\event\dto\CreateEventRequest.java
 C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\event\dto\EventResponse.java
 C:\Users\kauec\projects\freightflow-api\src\main\java\com\freightflow\modules\event\enums\EventType.java
