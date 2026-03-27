@@ -1,0 +1,30 @@
+# Build artifacts
+target/
+*.class
+*.jar
+!src/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker-compose*.yml
+Dockerfile
+
+# Environment
+.env
+.env.local
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if any frontend)
+node_modules/
