@@ -112,16 +112,36 @@ public class Voyage {
         return etd;
     }
 
+    public void setEtd(Instant etd) {
+        this.etd = etd;
+        this.updatedAt = Instant.now();
+    }
+
     public Instant getEta() {
         return eta;
+    }
+
+    public void setEta(Instant eta) {
+        this.eta = eta;
+        this.updatedAt = Instant.now();
     }
 
     public Instant getAtd() {
         return atd;
     }
 
+    public void setAtd(Instant atd) {
+        this.atd = atd;
+        this.updatedAt = Instant.now();
+    }
+
     public Instant getAta() {
         return ata;
+    }
+
+    public void setAta(Instant ata) {
+        this.ata = ata;
+        this.updatedAt = Instant.now();
     }
 
     public VoyageStatus getStatus() {

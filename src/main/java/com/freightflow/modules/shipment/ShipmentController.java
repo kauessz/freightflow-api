@@ -71,17 +71,4 @@ public class ShipmentController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/{id}/events")
-    @Operation(summary = "List shipment events")
-    public ResponseEntity<Void> listEvents(@PathVariable UUID id) {
-        // TODO: Implementar no modulo event
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
-    }
-
-    @PostMapping("/{id}/events")
-    @Operation(summary = "Register a new event for a shipment")
-    public ResponseEntity<Void> addEvent(@PathVariable UUID id) {
-        // TODO: Implementar no modulo event
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
-    }
 }

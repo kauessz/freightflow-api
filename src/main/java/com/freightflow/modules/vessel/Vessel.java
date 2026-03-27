@@ -64,16 +64,36 @@ public class Vessel {
         return name;
     }
 
+    public void setName(String name) {
+        this.name = name;
+        this.updatedAt = Instant.now();
+    }
+
     public String getFlag() {
         return flag;
+    }
+
+    public void setFlag(String flag) {
+        this.flag = flag;
+        this.updatedAt = Instant.now();
     }
 
     public VesselType getType() {
         return type;
     }
 
+    public void setType(VesselType type) {
+        this.type = type;
+        this.updatedAt = Instant.now();
+    }
+
     public Integer getCapacityTeu() {
         return capacityTeu;
+    }
+
+    public void setCapacityTeu(Integer capacityTeu) {
+        this.capacityTeu = capacityTeu;
+        this.updatedAt = Instant.now();
     }
 
     public List<Voyage> getVoyages() {
