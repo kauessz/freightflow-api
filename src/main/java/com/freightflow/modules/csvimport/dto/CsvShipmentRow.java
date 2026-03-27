@@ -41,8 +41,8 @@ public class CsvShipmentRow {
     private void validate() {
         if (booking == null || booking.isBlank()) {
             validationErrors.add("booking is required");
-        } else if (!booking.matches("^[A-Z]\\d{8,10}$")) {
-            validationErrors.add("booking must match pattern: letter + 8-10 digits (e.g., A123456789)");
+        } else if (!booking.matches("^[A-Z0-9\\-]{5,30}$")) {
+            validationErrors.add("booking must be 5-30 characters, uppercase letters, digits or hyphens (e.g., MEDU1234567, 570000000, P10482561)");
         }
 
         if (containerNumber != null && !containerNumber.isBlank()

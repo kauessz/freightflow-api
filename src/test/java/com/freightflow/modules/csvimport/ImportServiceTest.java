@@ -246,8 +246,9 @@ class ImportServiceTest {
             String template = importService.generateTemplate();
 
             assertThat(template).startsWith("booking,containerNumber,containerType");
-            assertThat(template).contains("A123456789");
+            assertThat(template).contains("P10482561");
             assertThat(template).contains("MSCU1234567");
+            assertThat(template).contains("570000000");
             assertThat(template.split("\n").length).isGreaterThanOrEqualTo(3);
         }
 

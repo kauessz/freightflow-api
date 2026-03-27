@@ -100,9 +100,11 @@ public class ImportService {
 
     public String generateTemplate() {
         return EXPECTED_HEADER + "\n"
-                + "A123456789,MSCU1234567,TEU40,MSC-2026-001,BRSSZ,NLRTM,Brazil Exports Ltda,European Imports BV\n"
-                + "B987654321,CMAU7654321,TEU40HC,CMA-2026-042,NLRTM,CNSHA,Dutch Trading Co,Shanghai Logistics\n"
-                + "C111222333,MAEU9876543,REEFER40,MAE-2026-088,SGSIN,BRSSZ,Singapore Fresh Ltd,Importadora Santos\n";
+                + "MEDU1234567,MSCU1234567,TEU40,MSC-2026-001,BRSSZ,NLRTM,Brazil Exports Ltda,European Imports BV\n"
+                + "570000000,MAEU7654321,TEU40HC,MAE-2026-088,SGSIN,BRSSZ,Singapore Fresh Ltd,Importadora Santos\n"
+                + "P10482561,CMAU9876543,REEFER40,CMA-2026-042,NLRTM,CNSHA,Dutch Trading Co,Shanghai Logistics\n"
+                + "GRI0123456,HLCU3344556,TEU40,CMA-2026-042,NLRTM,CNSHA,CMA CGM Logistics,Shanghai Import Co\n"
+                + "1234567890,CMAU1122334,TEU20,CAP-2026-015,BRSSZ,ARBUE,Hapag-Lloyd Brasil,Buenos Aires Imports\n";
     }
 
     public String getFormatDocumentation() {
@@ -114,7 +116,7 @@ public class ImportService {
                   "maxFileSize": "5MB",
                   "header": "booking,containerNumber,containerType,voyageNumber,originUnlocode,destinationUnlocode,shipper,consignee",
                   "columns": [
-                    {"name": "booking", "required": true, "pattern": "Letter + 8-10 digits", "example": "A123456789"},
+                    {"name": "booking", "required": true, "pattern": "5-30 chars, uppercase letters/digits/hyphens", "examples": ["MEDU1234567 (MSC)", "570000000 (Maersk)", "P10482561 (Mercosul)", "GRI0123456 (CMA CGM)", "1234567890 (Hapag-Lloyd)"]},
                     {"name": "containerNumber", "required": false, "pattern": "4 letters + 7 digits (ISO 6346)", "example": "MSCU1234567"},
                     {"name": "containerType", "required": false, "values": ["TEU20", "TEU40", "TEU40HC", "REEFER20", "REEFER40"]},
                     {"name": "voyageNumber", "required": true, "description": "Must match an existing voyage", "example": "MSC-2026-001"},

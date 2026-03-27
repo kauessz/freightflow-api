@@ -6,7 +6,8 @@ import java.util.UUID;
 
 public record CreateShipmentRequest(
     @NotBlank(message = "Booking is required")
-    @Pattern(regexp = "^[A-Z]\\d{8,10}$", message = "Booking must start with letter followed by 8-10 digits")
+    @Size(min = 5, max = 30, message = "Booking must be between 5 and 30 characters")
+    @Pattern(regexp = "^[A-Z0-9\\-]{5,30}$", message = "Booking must contain only uppercase letters, digits and hyphens")
     String booking,
 
     @Pattern(regexp = "^[A-Z]{4}\\d{7}$", message = "Container number must be 4 letters followed by 7 digits")

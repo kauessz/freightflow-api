@@ -168,7 +168,7 @@ public final class TestDataFactory {
 
     public static String csvWithErrors() {
         return "booking,containerNumber,containerType,voyageNumber,originUnlocode,destinationUnlocode,shipper,consignee\n"
-                + "INVALID,,TEU40,MSC-2026-001,BRSSZ,NLRTM,Shipper,Consignee\n"
+                + "AB,,TEU40,MSC-2026-001,BRSSZ,NLRTM,Shipper,Consignee\n"
                 + "A333333333,MSCU3333333,INVALID_TYPE,MSC-2026-001,BRSSZ,NLRTM,Shipper,Consignee\n"
                 + "A444444444,MSCU4444444,TEU40,FAKE-999,BRSSZ,NLRTM,Shipper,Consignee\n";
     }
