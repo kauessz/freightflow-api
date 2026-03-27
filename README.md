@@ -2,6 +2,8 @@
 
 > Maritime shipment management and tracking REST API — built for freight forwarders and logistics operators.
 
+[![CI](https://github.com/kauessz/freightflow-api/actions/workflows/ci.yml/badge.svg)](https://github.com/kauessz/freightflow-api/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/kauessz/freightflow-api/branch/main/graph/badge.svg)](https://codecov.io/gh/kauessz/freightflow-api)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Maven](https://img.shields.io/badge/Maven-3.9-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
