@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.freightflow.modules.auth.AuthServiceTest
+-------------------------------------------------------------------------------
+Tests run: 0, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.787 s -- in com.freightflow.modules.auth.AuthServiceTest

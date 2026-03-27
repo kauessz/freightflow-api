@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="pt"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CsvShipmentRow.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">FreightFlow API</a> &gt; <a href="index.source.html" class="el_package">com.freightflow.modules.csvimport.dto</a> &gt; <span class="el_source">CsvShipmentRow.java</span></div><h1>CsvShipmentRow.java</h1><pre class="source lang-java linenums">package com.freightflow.modules.csvimport.dto;
+
+import com.freightflow.modules.shipment.enums.ContainerType;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Representa uma linha parseada do CSV de importacao de shipments.
+ * Executa validacao sintatica antes de ir para o service.
+ */
+public class CsvShipmentRow {
+
+    private final int rowNumber;
+    private final String booking;
+    private final String containerNumber;
+    private final String containerType;
+    private final String voyageNumber;
+    private final String originUnlocode;
+    private final String destinationUnlocode;
+    private final String shipper;
+    private final String consignee;
+<span class="fc" id="L23">    private final List&lt;String&gt; validationErrors = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L25">    public CsvShipmentRow(int rowNumber, String[] columns) {</span>
+<span class="fc" id="L26">        this.rowNumber = rowNumber;</span>
+
+        // Parse com trim, tratando colunas faltantes
+<span class="fc" id="L29">        this.booking = safeGet(columns, 0);</span>
+<span class="fc" id="L30">        this.containerNumber = safeGet(columns, 1);</span>
+<span class="fc" id="L31">        this.containerType = safeGet(columns, 2);</span>
+<span class="fc" id="L32">        this.voyageNumber = safeGet(columns, 3);</span>
+<span class="fc" id="L33">        this.originUnlocode = safeGet(columns, 4);</span>
+<span class="fc" id="L34">        this.destinationUnlocode = safeGet(columns, 5);</span>
+<span class="fc" id="L35">        this.shipper = safeGet(columns, 6);</span>
+<span class="fc" id="L36">        this.consignee = safeGet(columns, 7);</span>
+
+<span class="fc" id="L38">        validate();</span>
+<span class="fc" id="L39">    }</span>
+
+    private void validate() {
+<span class="pc bpc" id="L42" title="2 of 4 branches missed.">        if (booking == null || booking.isBlank()) {</span>
+<span class="nc" id="L43">            validationErrors.add(&quot;booking is required&quot;);</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">        } else if (!booking.matches(&quot;^[A-Z]\\d{8,10}$&quot;)) {</span>
+<span class="fc" id="L45">            validationErrors.add(&quot;booking must match pattern: letter + 8-10 digits (e.g., A123456789)&quot;);</span>
+        }
+
+<span class="pc bpc" id="L48" title="1 of 4 branches missed.">        if (containerNumber != null &amp;&amp; !containerNumber.isBlank()</span>
+<span class="pc bpc" id="L49" title="1 of 2 branches missed.">                &amp;&amp; !containerNumber.matches(&quot;^[A-Z]{4}\\d{7}$&quot;)) {</span>
+<span class="nc" id="L50">            validationErrors.add(&quot;containerNumber must match ISO 6346: 4 letters + 7 digits (e.g., MSCU1234567)&quot;);</span>
+        }
+
+<span class="pc bpc" id="L53" title="2 of 4 branches missed.">        if (containerType != null &amp;&amp; !containerType.isBlank()) {</span>
+            try {
+<span class="fc" id="L55">                ContainerType.valueOf(containerType);</span>
+<span class="fc" id="L56">            } catch (IllegalArgumentException e) {</span>
+<span class="fc" id="L57">                validationErrors.add(&quot;containerType must be one of: TEU20, TEU40, TEU40HC, REEFER20, REEFER40&quot;);</span>
+<span class="fc" id="L58">            }</span>
+        }
+
+<span class="pc bpc" id="L61" title="2 of 4 branches missed.">        if (voyageNumber == null || voyageNumber.isBlank()) {</span>
+<span class="nc" id="L62">            validationErrors.add(&quot;voyageNumber is required&quot;);</span>
+        }
+
+<span class="pc bpc" id="L65" title="2 of 4 branches missed.">        if (originUnlocode == null || originUnlocode.isBlank()) {</span>
+<span class="nc" id="L66">            validationErrors.add(&quot;originUnlocode is required&quot;);</span>
+<span class="pc bpc" id="L67" title="1 of 2 branches missed.">        } else if (!originUnlocode.matches(&quot;^[A-Z]{5}$&quot;)) {</span>
+<span class="nc" id="L68">            validationErrors.add(&quot;originUnlocode must be 5 uppercase letters (e.g., BRSSZ)&quot;);</span>
+        }
+
+<span class="pc bpc" id="L71" title="2 of 4 branches missed.">        if (destinationUnlocode == null || destinationUnlocode.isBlank()) {</span>
+<span class="nc" id="L72">            validationErrors.add(&quot;destinationUnlocode is required&quot;);</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">        } else if (!destinationUnlocode.matches(&quot;^[A-Z]{5}$&quot;)) {</span>
+<span class="nc" id="L74">            validationErrors.add(&quot;destinationUnlocode must be 5 uppercase letters (e.g., NLRTM)&quot;);</span>
+        }
+
+<span class="pc bpc" id="L77" title="2 of 4 branches missed.">        if (originUnlocode != null &amp;&amp; destinationUnlocode != null</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">                &amp;&amp; originUnlocode.equals(destinationUnlocode)) {</span>
+<span class="nc" id="L79">            validationErrors.add(&quot;originUnlocode and destinationUnlocode must be different&quot;);</span>
+        }
+<span class="fc" id="L81">    }</span>
+
+    private String safeGet(String[] columns, int index) {
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">        if (index &gt;= columns.length) return null;</span>
+<span class="fc" id="L85">        String value = columns[index].trim();</span>
+        // Remove aspas duplas do CSV
+<span class="pc bpc" id="L87" title="3 of 4 branches missed.">        if (value.startsWith(&quot;\&quot;&quot;) &amp;&amp; value.endsWith(&quot;\&quot;&quot;)) {</span>
+<span class="nc" id="L88">            value = value.substring(1, value.length() - 1);</span>
+        }
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        return value.isEmpty() ? null : value;</span>
+    }
+
+    public boolean isValid() {
+<span class="fc" id="L94">        return validationErrors.isEmpty();</span>
+    }
+
+    public ContainerType parsedContainerType() {
+<span class="pc bpc" id="L98" title="2 of 4 branches missed.">        if (containerType == null || containerType.isBlank()) return null;</span>
+<span class="fc" id="L99">        return ContainerType.valueOf(containerType);</span>
+    }
+
+    // ==================== Getters ====================
+
+<span class="fc" id="L104">    public int getRowNumber() { return rowNumber; }</span>
+<span class="fc" id="L105">    public String getBooking() { return booking; }</span>
+<span class="fc" id="L106">    public String getContainerNumber() { return containerNumber; }</span>
+<span class="nc" id="L107">    public String getContainerType() { return containerType; }</span>
+<span class="fc" id="L108">    public String getVoyageNumber() { return voyageNumber; }</span>
+<span class="fc" id="L109">    public String getOriginUnlocode() { return originUnlocode; }</span>
+<span class="fc" id="L110">    public String getDestinationUnlocode() { return destinationUnlocode; }</span>
+<span class="fc" id="L111">    public String getShipper() { return shipper; }</span>
+<span class="fc" id="L112">    public String getConsignee() { return consignee; }</span>
+<span class="fc" id="L113">    public List&lt;String&gt; getValidationErrors() { return validationErrors; }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

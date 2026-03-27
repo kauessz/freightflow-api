@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="pt"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ImportService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">FreightFlow API</a> &gt; <a href="index.source.html" class="el_package">com.freightflow.modules.csvimport</a> &gt; <span class="el_source">ImportService.java</span></div><h1>ImportService.java</h1><pre class="source lang-java linenums">package com.freightflow.modules.csvimport;
+
+import com.freightflow.modules.auth.Tenant;
+import com.freightflow.modules.auth.TenantRepository;
+import com.freightflow.modules.csvimport.dto.CsvShipmentRow;
+import com.freightflow.modules.csvimport.dto.ImportResult;
+import com.freightflow.modules.port.Port;
+import com.freightflow.modules.port.PortRepository;
+import com.freightflow.modules.shipment.Shipment;
+import com.freightflow.modules.shipment.repository.ShipmentRepository;
+import com.freightflow.modules.voyage.Voyage;
+import com.freightflow.modules.voyage.VoyageRepository;
+import com.freightflow.shared.exception.BusinessException;
+import com.freightflow.shared.exception.ResourceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class ImportService {
+
+<span class="fc" id="L31">    private static final Logger log = LoggerFactory.getLogger(ImportService.class);</span>
+
+    private static final int MAX_ROWS = 500;
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    private static final String EXPECTED_HEADER = &quot;booking,containerNumber,containerType,voyageNumber,originUnlocode,destinationUnlocode,shipper,consignee&quot;;
+
+    private final ShipmentRepository shipmentRepository;
+    private final VoyageRepository voyageRepository;
+    private final PortRepository portRepository;
+    private final TenantRepository tenantRepository;
+
+    public ImportService(ShipmentRepository shipmentRepository,
+                         VoyageRepository voyageRepository,
+                         PortRepository portRepository,
+<span class="fc" id="L45">                         TenantRepository tenantRepository) {</span>
+<span class="fc" id="L46">        this.shipmentRepository = shipmentRepository;</span>
+<span class="fc" id="L47">        this.voyageRepository = voyageRepository;</span>
+<span class="fc" id="L48">        this.portRepository = portRepository;</span>
+<span class="fc" id="L49">        this.tenantRepository = tenantRepository;</span>
+<span class="fc" id="L50">    }</span>
+
+    // ==================== Import ====================
+
+    @Transactional
+    public ImportResult importShipments(MultipartFile file, UUID tenantId) {
+<span class="fc" id="L56">        log.info(&quot;Starting CSV import for tenant={}, file={}, size={}&quot;,</span>
+<span class="fc" id="L57">                tenantId, file.getOriginalFilename(), file.getSize());</span>
+
+<span class="fc" id="L59">        validateFile(file);</span>
+
+<span class="fc" id="L61">        Tenant tenant = tenantRepository.findById(tenantId)</span>
+<span class="pc" id="L62">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Tenant&quot;, tenantId));</span>
+
+<span class="fc" id="L64">        List&lt;CsvShipmentRow&gt; rows = parseFile(file);</span>
+
+<span class="fc bfc" id="L66" title="All 2 branches covered.">        if (rows.isEmpty()) {</span>
+<span class="fc" id="L67">            throw new BusinessException(&quot;CSV file has no data rows&quot;);</span>
+        }
+
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">        if (rows.size() &gt; MAX_ROWS) {</span>
+<span class="nc" id="L71">            throw new BusinessException(&quot;CSV file exceeds maximum of &quot; + MAX_ROWS + &quot; rows. Found: &quot; + rows.size());</span>
+        }
+
+<span class="fc" id="L74">        List&lt;ImportResult.ImportedShipment&gt; imported = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L75">        List&lt;ImportResult.ImportError&gt; errors = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L77" title="All 2 branches covered.">        for (CsvShipmentRow row : rows) {</span>
+            try {
+<span class="fc bfc" id="L79" title="All 2 branches covered.">                if (!row.isValid()) {</span>
+<span class="fc" id="L80">                    errors.add(new ImportResult.ImportError(</span>
+<span class="fc" id="L81">                            row.getRowNumber(), row.getBooking(), row.getValidationErrors()));</span>
+<span class="fc" id="L82">                    continue;</span>
+                }
+
+<span class="fc" id="L85">                processRow(row, tenant, imported, errors);</span>
+<span class="nc" id="L86">            } catch (Exception e) {</span>
+<span class="nc" id="L87">                log.warn(&quot;Unexpected error processing row {}: {}&quot;, row.getRowNumber(), e.getMessage());</span>
+<span class="nc" id="L88">                errors.add(new ImportResult.ImportError(</span>
+<span class="nc" id="L89">                        row.getRowNumber(), row.getBooking(), List.of(&quot;Unexpected error: &quot; + e.getMessage())));</span>
+<span class="fc" id="L90">            }</span>
+<span class="fc" id="L91">        }</span>
+
+<span class="fc" id="L93">        log.info(&quot;CSV import completed: total={}, success={}, errors={}&quot;,</span>
+<span class="fc" id="L94">                rows.size(), imported.size(), errors.size());</span>
+
+<span class="fc" id="L96">        return ImportResult.of(imported, errors, rows.size());</span>
+    }
+
+    // ==================== Template ====================
+
+    public String generateTemplate() {
+<span class="fc" id="L102">        return EXPECTED_HEADER + &quot;\n&quot;</span>
+                + &quot;A123456789,MSCU1234567,TEU40,MSC-2026-001,BRSSZ,NLRTM,Brazil Exports Ltda,European Imports BV\n&quot;
+                + &quot;B987654321,CMAU7654321,TEU40HC,CMA-2026-042,NLRTM,CNSHA,Dutch Trading Co,Shanghai Logistics\n&quot;
+                + &quot;C111222333,MAEU9876543,REEFER40,MAE-2026-088,SGSIN,BRSSZ,Singapore Fresh Ltd,Importadora Santos\n&quot;;
+    }
+
+    public String getFormatDocumentation() {
+<span class="fc" id="L109">        return &quot;&quot;&quot;</span>
+                {
+                  &quot;format&quot;: &quot;CSV (Comma-Separated Values)&quot;,
+                  &quot;encoding&quot;: &quot;UTF-8&quot;,
+                  &quot;maxRows&quot;: 500,
+                  &quot;maxFileSize&quot;: &quot;5MB&quot;,
+                  &quot;header&quot;: &quot;booking,containerNumber,containerType,voyageNumber,originUnlocode,destinationUnlocode,shipper,consignee&quot;,
+                  &quot;columns&quot;: [
+                    {&quot;name&quot;: &quot;booking&quot;, &quot;required&quot;: true, &quot;pattern&quot;: &quot;Letter + 8-10 digits&quot;, &quot;example&quot;: &quot;A123456789&quot;},
+                    {&quot;name&quot;: &quot;containerNumber&quot;, &quot;required&quot;: false, &quot;pattern&quot;: &quot;4 letters + 7 digits (ISO 6346)&quot;, &quot;example&quot;: &quot;MSCU1234567&quot;},
+                    {&quot;name&quot;: &quot;containerType&quot;, &quot;required&quot;: false, &quot;values&quot;: [&quot;TEU20&quot;, &quot;TEU40&quot;, &quot;TEU40HC&quot;, &quot;REEFER20&quot;, &quot;REEFER40&quot;]},
+                    {&quot;name&quot;: &quot;voyageNumber&quot;, &quot;required&quot;: true, &quot;description&quot;: &quot;Must match an existing voyage&quot;, &quot;example&quot;: &quot;MSC-2026-001&quot;},
+                    {&quot;name&quot;: &quot;originUnlocode&quot;, &quot;required&quot;: true, &quot;pattern&quot;: &quot;5 uppercase letters&quot;, &quot;example&quot;: &quot;BRSSZ&quot;},
+                    {&quot;name&quot;: &quot;destinationUnlocode&quot;, &quot;required&quot;: true, &quot;pattern&quot;: &quot;5 uppercase letters&quot;, &quot;example&quot;: &quot;NLRTM&quot;},
+                    {&quot;name&quot;: &quot;shipper&quot;, &quot;required&quot;: false, &quot;maxLength&quot;: 200},
+                    {&quot;name&quot;: &quot;consignee&quot;, &quot;required&quot;: false, &quot;maxLength&quot;: 200}
+                  ],
+                  &quot;notes&quot;: [
+                    &quot;First row must be the header row&quot;,
+                    &quot;Booking must be unique per tenant&quot;,
+                    &quot;Voyage must already exist in the system&quot;,
+                    &quot;Ports are looked up by UNLOCODE and must exist in the system&quot;,
+                    &quot;Empty optional fields should be left blank (not null)&quot;
+                  ]
+                }
+                &quot;&quot;&quot;;
+    }
+
+    // ==================== Private helpers ====================
+
+    private void validateFile(MultipartFile file) {
+<span class="fc bfc" id="L140" title="All 2 branches covered.">        if (file.isEmpty()) {</span>
+<span class="fc" id="L141">            throw new BusinessException(&quot;File is empty&quot;);</span>
+        }
+
+<span class="fc bfc" id="L144" title="All 2 branches covered.">        if (file.getSize() &gt; MAX_FILE_SIZE) {</span>
+<span class="fc" id="L145">            throw new BusinessException(&quot;File exceeds maximum size of 5MB. Size: &quot;</span>
+<span class="fc" id="L146">                    + (file.getSize() / 1024) + &quot;KB&quot;);</span>
+        }
+
+<span class="fc" id="L149">        String filename = file.getOriginalFilename();</span>
+<span class="pc bpc" id="L150" title="1 of 4 branches missed.">        if (filename != null &amp;&amp; !filename.toLowerCase().endsWith(&quot;.csv&quot;)) {</span>
+<span class="fc" id="L151">            throw new BusinessException(&quot;Only .csv files are accepted. Received: &quot; + filename);</span>
+        }
+<span class="fc" id="L153">    }</span>
+
+    private List&lt;CsvShipmentRow&gt; parseFile(MultipartFile file) {
+<span class="fc" id="L156">        List&lt;CsvShipmentRow&gt; rows = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L158">        try (BufferedReader reader = new BufferedReader(</span>
+<span class="fc" id="L159">                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {</span>
+
+<span class="fc" id="L161">            String headerLine = reader.readLine();</span>
+<span class="pc bpc" id="L162" title="1 of 2 branches missed.">            if (headerLine == null) {</span>
+<span class="nc" id="L163">                throw new BusinessException(&quot;CSV file is empty&quot;);</span>
+            }
+
+            // Valida header (normaliza espacos e case)
+<span class="fc" id="L167">            String normalizedHeader = headerLine.trim().toLowerCase().replaceAll(&quot;\\s+&quot;, &quot;&quot;);</span>
+<span class="fc" id="L168">            String expectedNormalized = EXPECTED_HEADER.toLowerCase().replaceAll(&quot;\\s+&quot;, &quot;&quot;);</span>
+<span class="fc bfc" id="L169" title="All 2 branches covered.">            if (!normalizedHeader.equals(expectedNormalized)) {</span>
+<span class="fc" id="L170">                throw new BusinessException(&quot;Invalid CSV header. Expected: &quot; + EXPECTED_HEADER</span>
+<span class="fc" id="L171">                        + &quot; — Received: &quot; + headerLine.trim());</span>
+            }
+
+<span class="fc" id="L174">            int rowNumber = 1;</span>
+            String line;
+<span class="fc bfc" id="L176" title="All 2 branches covered.">            while ((line = reader.readLine()) != null) {</span>
+<span class="fc" id="L177">                rowNumber++;</span>
+<span class="fc" id="L178">                String trimmed = line.trim();</span>
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">                if (trimmed.isEmpty()) continue; // Pula linhas em branco</span>
+
+<span class="fc" id="L181">                String[] columns = trimmed.split(&quot;,&quot;, -1); // -1 para manter campos vazios no final</span>
+<span class="fc" id="L182">                rows.add(new CsvShipmentRow(rowNumber, columns));</span>
+<span class="fc" id="L183">            }</span>
+
+<span class="fc" id="L185">        } catch (BusinessException e) {</span>
+<span class="fc" id="L186">            throw e;</span>
+<span class="nc" id="L187">        } catch (Exception e) {</span>
+<span class="nc" id="L188">            throw new BusinessException(&quot;Failed to parse CSV file: &quot; + e.getMessage());</span>
+<span class="fc" id="L189">        }</span>
+
+<span class="fc" id="L191">        return rows;</span>
+    }
+
+    private void processRow(CsvShipmentRow row, Tenant tenant,
+                            List&lt;ImportResult.ImportedShipment&gt; imported,
+                            List&lt;ImportResult.ImportError&gt; errors) {
+
+<span class="fc" id="L198">        List&lt;String&gt; rowErrors = new ArrayList&lt;&gt;();</span>
+
+        // Verificar booking duplicado no tenant
+<span class="fc bfc" id="L201" title="All 2 branches covered.">        if (shipmentRepository.existsByBookingAndTenantId(row.getBooking(), tenant.getId())) {</span>
+<span class="fc" id="L202">            rowErrors.add(&quot;Booking &quot; + row.getBooking() + &quot; already exists for this tenant&quot;);</span>
+        }
+
+        // Verificar booking duplicado global
+<span class="fc bfc" id="L206" title="All 2 branches covered.">        if (shipmentRepository.existsByBooking(row.getBooking())) {</span>
+<span class="fc" id="L207">            rowErrors.add(&quot;Booking &quot; + row.getBooking() + &quot; already exists in the system&quot;);</span>
+        }
+
+        // Buscar voyage por voyageNumber
+<span class="fc" id="L211">        Voyage voyage = voyageRepository.findByVoyageNumber(row.getVoyageNumber()).orElse(null);</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">        if (voyage == null) {</span>
+<span class="fc" id="L213">            rowErrors.add(&quot;Voyage not found: &quot; + row.getVoyageNumber());</span>
+        }
+
+        // Buscar ports por UNLOCODE
+<span class="fc" id="L217">        Port originPort = portRepository.findByUnlocode(row.getOriginUnlocode()).orElse(null);</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">        if (originPort == null) {</span>
+<span class="fc" id="L219">            rowErrors.add(&quot;Origin port not found: &quot; + row.getOriginUnlocode());</span>
+        }
+
+<span class="fc" id="L222">        Port destinationPort = portRepository.findByUnlocode(row.getDestinationUnlocode()).orElse(null);</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (destinationPort == null) {</span>
+<span class="fc" id="L224">            rowErrors.add(&quot;Destination port not found: &quot; + row.getDestinationUnlocode());</span>
+        }
+
+<span class="fc bfc" id="L227" title="All 2 branches covered.">        if (!rowErrors.isEmpty()) {</span>
+<span class="fc" id="L228">            errors.add(new ImportResult.ImportError(row.getRowNumber(), row.getBooking(), rowErrors));</span>
+<span class="fc" id="L229">            return;</span>
+        }
+
+        // Criar shipment
+<span class="fc" id="L233">        Shipment shipment = new Shipment(row.getBooking(), voyage, originPort, destinationPort, tenant);</span>
+<span class="fc" id="L234">        shipment.setContainerNumber(row.getContainerNumber());</span>
+<span class="fc" id="L235">        shipment.setContainerType(row.parsedContainerType());</span>
+<span class="fc" id="L236">        shipment.setShipper(row.getShipper());</span>
+<span class="fc" id="L237">        shipment.setConsignee(row.getConsignee());</span>
+
+<span class="fc" id="L239">        Shipment saved = shipmentRepository.save(shipment);</span>
+
+<span class="fc" id="L241">        imported.add(new ImportResult.ImportedShipment(</span>
+<span class="fc" id="L242">                row.getRowNumber(),</span>
+<span class="fc" id="L243">                saved.getId(),</span>
+<span class="fc" id="L244">                saved.getBooking(),</span>
+<span class="fc" id="L245">                saved.getContainerNumber(),</span>
+<span class="fc" id="L246">                row.getVoyageNumber(),</span>
+<span class="fc" id="L247">                row.getOriginUnlocode(),</span>
+<span class="fc" id="L248">                row.getDestinationUnlocode(),</span>
+<span class="fc" id="L249">                saved.getStatus().name()</span>
+        ));
+<span class="fc" id="L251">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

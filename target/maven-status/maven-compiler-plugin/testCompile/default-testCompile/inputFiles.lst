@@ -1,0 +1,8 @@
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\config\TestSecurityConfig.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\fixtures\TestDataFactory.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\modules\auth\AuthControllerTest.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\modules\auth\AuthServiceTest.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\modules\csvimport\ImportControllerTest.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\modules\csvimport\ImportServiceTest.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\modules\shipment\ShipmentControllerTest.java
+C:\Users\kauec\projects\freightflow-api\src\test\java\com\freightflow\modules\shipment\ShipmentServiceTest.java

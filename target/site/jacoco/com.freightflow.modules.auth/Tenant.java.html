@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="pt"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Tenant.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">FreightFlow API</a> &gt; <a href="index.source.html" class="el_package">com.freightflow.modules.auth</a> &gt; <span class="el_source">Tenant.java</span></div><h1>Tenant.java</h1><pre class="source lang-java linenums">package com.freightflow.modules.auth;
+
+import jakarta.persistence.*;
+import java.util.UUID;
+import java.time.Instant;
+
+@Entity
+@Table(name = &quot;tenants&quot;)
+public class Tenant {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(nullable = false, unique = true)
+    private String name;
+
+    @Column(nullable = false, unique = true)
+    private String slug;
+
+    @Column(nullable = false)
+    private String contactEmail;
+
+    @Column(nullable = false)
+    private boolean active;
+
+    @Column(nullable = false, length = 20)
+    private String plan;
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @Column(nullable = false)
+    private Instant updatedAt;
+
+<span class="nc" id="L35">    protected Tenant() {}</span>
+
+<span class="fc" id="L37">    public Tenant(String name, String slug, String contactEmail, String plan) {</span>
+<span class="fc" id="L38">        this.name = name;</span>
+<span class="fc" id="L39">        this.slug = slug;</span>
+<span class="fc" id="L40">        this.contactEmail = contactEmail;</span>
+<span class="fc" id="L41">        this.active = true;</span>
+<span class="fc" id="L42">        this.plan = plan;</span>
+<span class="fc" id="L43">        this.createdAt = Instant.now();</span>
+<span class="fc" id="L44">        this.updatedAt = Instant.now();</span>
+<span class="fc" id="L45">    }</span>
+
+    public UUID getId() {
+<span class="fc" id="L48">        return id;</span>
+    }
+
+    public String getName() {
+<span class="fc" id="L52">        return name;</span>
+    }
+
+    public String getSlug() {
+<span class="fc" id="L56">        return slug;</span>
+    }
+
+    public String getContactEmail() {
+<span class="nc" id="L60">        return contactEmail;</span>
+    }
+
+    public boolean isActive() {
+<span class="nc" id="L64">        return active;</span>
+    }
+
+    public void setActive(boolean active) {
+<span class="nc" id="L68">        this.active = active;</span>
+<span class="nc" id="L69">        this.updatedAt = Instant.now();</span>
+<span class="nc" id="L70">    }</span>
+
+    public String getPlan() {
+<span class="nc" id="L73">        return plan;</span>
+    }
+
+    public void setPlan(String plan) {
+<span class="nc" id="L77">        this.plan = plan;</span>
+<span class="nc" id="L78">        this.updatedAt = Instant.now();</span>
+<span class="nc" id="L79">    }</span>
+
+    public Instant getCreatedAt() {
+<span class="nc" id="L82">        return createdAt;</span>
+    }
+
+    public Instant getUpdatedAt() {
+<span class="nc" id="L86">        return updatedAt;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

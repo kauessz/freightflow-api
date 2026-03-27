@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="pt"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VesselController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">FreightFlow API</a> &gt; <a href="index.source.html" class="el_package">com.freightflow.modules.vessel</a> &gt; <span class="el_source">VesselController.java</span></div><h1>VesselController.java</h1><pre class="source lang-java linenums">package com.freightflow.modules.vessel;
+
+import com.freightflow.modules.vessel.dto.CreateVesselRequest;
+import com.freightflow.modules.vessel.dto.UpdateVesselRequest;
+import com.freightflow.modules.vessel.dto.VesselResponse;
+import com.freightflow.shared.pagination.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping(&quot;/api/v1/vessels&quot;)
+@Tag(name = &quot;Vessels&quot;, description = &quot;Vessel fleet management endpoints&quot;)
+@SecurityRequirement(name = &quot;Bearer Authentication&quot;)
+public class VesselController {
+
+    private final VesselService vesselService;
+
+<span class="nc" id="L28">    public VesselController(VesselService vesselService) {</span>
+<span class="nc" id="L29">        this.vesselService = vesselService;</span>
+<span class="nc" id="L30">    }</span>
+
+    @GetMapping
+    @Operation(summary = &quot;List vessels&quot;, description = &quot;Paginated list of vessels ordered by name&quot;)
+    public ResponseEntity&lt;PageResponse&lt;VesselResponse&gt;&gt; list(
+            @RequestParam(defaultValue = &quot;0&quot;) int page,
+            @RequestParam(defaultValue = &quot;20&quot;) int size) {
+<span class="nc" id="L37">        Pageable pageable = PageRequest.of(page, size, Sort.by(&quot;name&quot;));</span>
+<span class="nc" id="L38">        return ResponseEntity.ok(vesselService.list(pageable));</span>
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    @Operation(summary = &quot;Get vessel by ID&quot;)
+    public ResponseEntity&lt;VesselResponse&gt; getById(@PathVariable UUID id) {
+<span class="nc" id="L44">        return ResponseEntity.ok(vesselService.getById(id));</span>
+    }
+
+    @GetMapping(&quot;/imo/{imo}&quot;)
+    @Operation(summary = &quot;Get vessel by IMO number&quot;)
+    public ResponseEntity&lt;VesselResponse&gt; getByImo(@PathVariable String imo) {
+<span class="nc" id="L50">        return ResponseEntity.ok(vesselService.getByImo(imo));</span>
+    }
+
+    @PostMapping
+    @Operation(summary = &quot;Register a new vessel&quot;)
+    public ResponseEntity&lt;VesselResponse&gt; create(@Valid @RequestBody CreateVesselRequest request) {
+<span class="nc" id="L56">        VesselResponse response = vesselService.create(request);</span>
+<span class="nc" id="L57">        return ResponseEntity.status(HttpStatus.CREATED).body(response);</span>
+    }
+
+    @PutMapping(&quot;/{id}&quot;)
+    @Operation(summary = &quot;Update vessel details&quot;)
+    public ResponseEntity&lt;VesselResponse&gt; update(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateVesselRequest request) {
+<span class="nc" id="L65">        return ResponseEntity.ok(vesselService.update(id, request));</span>
+    }
+
+    @DeleteMapping(&quot;/{id}&quot;)
+    @Operation(summary = &quot;Delete a vessel&quot;, description = &quot;Only allowed if vessel has no voyages&quot;)
+    public ResponseEntity&lt;Void&gt; delete(@PathVariable UUID id) {
+<span class="nc" id="L71">        vesselService.delete(id);</span>
+<span class="nc" id="L72">        return ResponseEntity.noContent().build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="pt"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Alert.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">FreightFlow API</a> &gt; <a href="index.source.html" class="el_package">com.freightflow.modules.alert</a> &gt; <span class="el_source">Alert.java</span></div><h1>Alert.java</h1><pre class="source lang-java linenums">package com.freightflow.modules.alert;
+
+import jakarta.persistence.*;
+import com.freightflow.modules.shipment.Shipment;
+import com.freightflow.modules.alert.enums.AlertType;
+import com.freightflow.modules.alert.enums.Severity;
+import java.util.UUID;
+import java.time.Instant;
+
+@Entity
+@Table(name = &quot;alerts&quot;)
+public class Alert {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = &quot;shipment_id&quot;, nullable = false)
+    private Shipment shipment;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private AlertType type;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private Severity severity;
+
+    @Column(nullable = false)
+    private String message;
+
+    @Column(nullable = false)
+    private boolean resolved;
+
+    @Column
+    private Instant resolvedAt;
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+<span class="nc" id="L41">    protected Alert() {}</span>
+
+<span class="nc" id="L43">    public Alert(Shipment shipment, AlertType type, Severity severity, String message) {</span>
+<span class="nc" id="L44">        this.shipment = shipment;</span>
+<span class="nc" id="L45">        this.type = type;</span>
+<span class="nc" id="L46">        this.severity = severity;</span>
+<span class="nc" id="L47">        this.message = message;</span>
+<span class="nc" id="L48">        this.resolved = false;</span>
+<span class="nc" id="L49">        this.createdAt = Instant.now();</span>
+<span class="nc" id="L50">    }</span>
+
+    public void resolve() {
+<span class="nc" id="L53">        this.resolved = true;</span>
+<span class="nc" id="L54">        this.resolvedAt = Instant.now();</span>
+<span class="nc" id="L55">    }</span>
+
+    public UUID getId() {
+<span class="nc" id="L58">        return id;</span>
+    }
+
+    public Shipment getShipment() {
+<span class="nc" id="L62">        return shipment;</span>
+    }
+
+    public AlertType getType() {
+<span class="nc" id="L66">        return type;</span>
+    }
+
+    public Severity getSeverity() {
+<span class="nc" id="L70">        return severity;</span>
+    }
+
+    public String getMessage() {
+<span class="nc" id="L74">        return message;</span>
+    }
+
+    public boolean isResolved() {
+<span class="nc" id="L78">        return resolved;</span>
+    }
+
+    public Instant getResolvedAt() {
+<span class="nc" id="L82">        return resolvedAt;</span>
+    }
+
+    public Instant getCreatedAt() {
+<span class="nc" id="L86">        return createdAt;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
