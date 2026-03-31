@@ -3,7 +3,6 @@ package com.freightflow.modules.ais;
 import com.freightflow.modules.ais.dto.AisPositionResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -11,19 +10,33 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Client for Marine Digital AIS API.
  * Fetches real-time vessel positions by IMO number.
- * Results are cached in Redis for 5 minutes.
+ *
+ * Cache in-memory com TTL de 55s: quando o frontend faz refresh a cada 60s
+ * o cache já expirou e a API AIS é consultada de verdade a cada ciclo.
+ * Em produção com Redis, substituir por RedisCacheManager com TTL configurado.
  */
 @Component
 public class AisClient {
 
     private static final Logger log = LoggerFactory.getLogger(AisClient.class);
     private static final String AIS_BASE_URL = "https://api.marine.digital/v1/ais/vessel/";
+    private static final long CACHE_TTL_SECONDS = 55;
 
     private final RestTemplate restTemplate;
+
+    /** Cache in-memory: IMO → (posição, expiresAt) */
+    private final ConcurrentHashMap<String, CachedEntry> positionCache = new ConcurrentHashMap<>();
+
+    private record CachedEntry(AisPositionResponse position, Instant expiresAt) {
+        boolean isExpired() {
+            return Instant.now().isAfter(expiresAt);
+        }
+    }
 
     public AisClient() {
         var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
@@ -34,18 +47,45 @@ public class AisClient {
 
     /**
      * Fetch AIS position for a vessel by IMO number.
-     * Cached in Redis with key "ais:position:{imo}" for 5 minutes.
+     * Cached in-memory with TTL of 55s.
      * Returns null on any failure (graceful degradation).
      */
-    @Cacheable(value = "ais-positions", key = "#imo")
     public AisPositionResponse getPosition(String imo) {
+        // Check cache first
+        CachedEntry cached = positionCache.get(imo);
+        if (cached != null && !cached.isExpired()) {
+            log.debug("AIS cache hit for IMO {} (expires in {}s)",
+                    imo, Duration.between(Instant.now(), cached.expiresAt()).toSeconds());
+            return cached.position();
+        }
+
+        // Cache miss or expired — fetch from API
+        AisPositionResponse result = fetchFromApi(imo);
+
+        if (result != null) {
+            positionCache.put(imo, new CachedEntry(
+                    result,
+                    Instant.now().plusSeconds(CACHE_TTL_SECONDS)
+            ));
+            log.info("AIS position cached for IMO {} (TTL {}s)", imo, CACHE_TTL_SECONDS);
+        } else {
+            // Remove stale entry so next call retries immediately
+            positionCache.remove(imo);
+        }
+
+        return result;
+    }
+
+    private AisPositionResponse fetchFromApi(String imo) {
         try {
-            log.info("Fetching AIS position for IMO {}", imo);
+            log.info("Fetching AIS position from API for IMO {}", imo);
+            @SuppressWarnings("rawtypes")
             ResponseEntity<Map> response = restTemplate.getForEntity(
-                AIS_BASE_URL + imo, Map.class
+                    AIS_BASE_URL + imo, Map.class
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                @SuppressWarnings("unchecked")
                 Map<String, Object> body = response.getBody();
                 return parsePosition(imo, body);
             }
@@ -81,11 +121,11 @@ public class AisClient {
             Double speed = toDouble(body.getOrDefault("speed", body.get("sog")));
             Double course = toDouble(body.getOrDefault("course", body.get("cog")));
             String status = body.containsKey("status")
-                ? String.valueOf(body.get("status"))
-                : "underway";
+                    ? String.valueOf(body.get("status"))
+                    : "underway";
             String timestampStr = body.containsKey("timestamp")
-                ? String.valueOf(body.get("timestamp"))
-                : null;
+                    ? String.valueOf(body.get("timestamp"))
+                    : null;
 
             Instant timestamp;
             try {
