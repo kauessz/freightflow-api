@@ -10,8 +10,11 @@ public record TrackingResponse(
     String containerNumber,
     ShipmentStatus status,
     String vesselName,
+    String voyageNumber,
     String originPort,
+    String originPortUnlocode,
     String destinationPort,
+    String destinationPortUnlocode,
     Instant etd,
     Instant eta,
     List<TrackingEvent> events
@@ -20,6 +23,7 @@ public record TrackingResponse(
         EventType type,
         String location,
         Instant occurredAt,
+        Instant reportedAt,
         String description
     ) {}
 }

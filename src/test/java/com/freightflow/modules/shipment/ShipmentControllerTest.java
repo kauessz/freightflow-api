@@ -57,6 +57,7 @@ class ShipmentControllerTest {
                 ContainerType.TEU40, ShipmentStatus.BOOKED,
                 "Santos", "BRSSZ", "Rotterdam", "NLRTM",
                 "MSC Oscar", "MSC-2026-001",
+                Instant.now().plusSeconds(86400),
                 Instant.now(), Instant.now()
         );
     }
@@ -147,6 +148,7 @@ class ShipmentControllerTest {
                     ContainerType.TEU40HC, ShipmentStatus.BOOKED,
                     "Santos", "BRSSZ", "Rotterdam", "NLRTM",
                     "MSC Oscar", "MSC-2026-001",
+                    Instant.now().plusSeconds(86400),
                     Instant.now(), Instant.now()
             );
 

@@ -7,6 +7,7 @@ import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
+import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
 import com.freightflow.modules.shipment.enums.ContainerType;
 import com.freightflow.modules.shipment.enums.ShipmentStatus;
@@ -29,13 +30,15 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -264,6 +267,110 @@ class ShipmentServiceTest {
                     .isInstanceOf(ResourceNotFoundException.class);
 
             verify(shipmentRepository, never()).deleteById(any());
+        }
+    }
+
+    // ==================== getStats ====================
+
+    @Nested
+    @DisplayName("getStats()")
+    class GetStatsTests {
+
+        @Test
+        @DisplayName("Deve retornar stats corretos para o tenant")
+        void deveRetornarStatsCorretos() {
+            UUID tenantId = tenant.getId();
+
+            when(shipmentRepository.countByTenantId(tenantId)).thenReturn(10L);
+            when(shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.IN_TRANSIT))
+                    .thenReturn(4L);
+            when(shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED))
+                    .thenReturn(3L);
+            when(shipmentRepository.countDelayed(eq(tenantId), any(Instant.class), anyList()))
+                    .thenReturn(2L);
+            when(shipmentRepository.countAtRisk(
+                    eq(tenantId), any(Instant.class), any(Instant.class), eq(ShipmentStatus.IN_TRANSIT)))
+                    .thenReturn(1L);
+
+            ShipmentStatsResponse stats = shipmentService.getStats(tenantId);
+
+            assertThat(stats.total()).isEqualTo(10L);
+            assertThat(stats.inTransit()).isEqualTo(4L);
+            assertThat(stats.arrived()).isEqualTo(3L);
+            assertThat(stats.delayed()).isEqualTo(2L);
+            assertThat(stats.atRisk()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("Deve retornar zeros quando nao ha embarques")
+        void deveRetornarZerosQuandoSemEmbarques() {
+            UUID tenantId = tenant.getId();
+
+            when(shipmentRepository.countByTenantId(tenantId)).thenReturn(0L);
+            when(shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.IN_TRANSIT))
+                    .thenReturn(0L);
+            when(shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED))
+                    .thenReturn(0L);
+            when(shipmentRepository.countDelayed(eq(tenantId), any(Instant.class), anyList()))
+                    .thenReturn(0L);
+            when(shipmentRepository.countAtRisk(
+                    eq(tenantId), any(Instant.class), any(Instant.class), eq(ShipmentStatus.IN_TRANSIT)))
+                    .thenReturn(0L);
+
+            ShipmentStatsResponse stats = shipmentService.getStats(tenantId);
+
+            assertThat(stats.total()).isZero();
+            assertThat(stats.delayed()).isZero();
+            assertThat(stats.atRisk()).isZero();
+        }
+
+        @Test
+        @DisplayName("Deve passar janela de 48h para countAtRisk")
+        void devePassarJanela48hParaAtRisk() {
+            UUID tenantId = tenant.getId();
+
+            when(shipmentRepository.countByTenantId(tenantId)).thenReturn(5L);
+            when(shipmentRepository.countByTenantIdAndStatus(any(), any())).thenReturn(0L);
+            when(shipmentRepository.countDelayed(any(), any(), any())).thenReturn(0L);
+            when(shipmentRepository.countAtRisk(any(), any(), any(), any())).thenReturn(0L);
+
+            shipmentService.getStats(tenantId);
+
+            // Verifica que countAtRisk recebeu deadline aproximadamente 48h à frente
+            verify(shipmentRepository).countAtRisk(
+                    eq(tenantId),
+                    argThat(now -> now.isBefore(Instant.now().plusSeconds(5))),
+                    argThat(deadline -> {
+                        Instant expected = Instant.now().plus(48, ChronoUnit.HOURS);
+                        // Tolerância de 10 segundos
+                        return Math.abs(deadline.toEpochMilli() - expected.toEpochMilli()) < 10_000;
+                    }),
+                    eq(ShipmentStatus.IN_TRANSIT)
+            );
+        }
+
+        @Test
+        @DisplayName("Deve excluir statuses finais no calculo de delayed")
+        void deveExcluirStatususFinaisEmDelayed() {
+            UUID tenantId = tenant.getId();
+
+            when(shipmentRepository.countByTenantId(any())).thenReturn(0L);
+            when(shipmentRepository.countByTenantIdAndStatus(any(), any())).thenReturn(0L);
+            when(shipmentRepository.countDelayed(any(), any(), any())).thenReturn(0L);
+            when(shipmentRepository.countAtRisk(any(), any(), any(), any())).thenReturn(0L);
+
+            shipmentService.getStats(tenantId);
+
+            verify(shipmentRepository).countDelayed(
+                    eq(tenantId),
+                    any(Instant.class),
+                    argThat(statuses ->
+                        statuses.contains(ShipmentStatus.ARRIVED) &&
+                        statuses.contains(ShipmentStatus.DELIVERED) &&
+                        statuses.contains(ShipmentStatus.GATE_OUT) &&
+                        statuses.contains(ShipmentStatus.CANCELLED)
+                    )
+            );
         }
     }
 }

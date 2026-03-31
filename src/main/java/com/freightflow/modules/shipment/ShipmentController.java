@@ -2,6 +2,7 @@ package com.freightflow.modules.shipment;
 
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
+import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
 import com.freightflow.modules.shipment.service.ShipmentService;
 import com.freightflow.shared.pagination.PageResponse;
@@ -41,6 +42,13 @@ public class ShipmentController {
         return ResponseEntity.ok(shipmentService.list(user.getTenantId(), pageable));
     }
 
+    @GetMapping("/stats")
+    @Operation(summary = "Get shipment KPI stats", description = "Returns total, inTransit, arrived, delayed and atRisk counts for the tenant")
+    public ResponseEntity<ShipmentStatsResponse> getStats(
+            @AuthenticationPrincipal UserPrincipal user) {
+        return ResponseEntity.ok(shipmentService.getStats(user.getTenantId()));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get shipment by ID")
     public ResponseEntity<ShipmentResponse> getById(@PathVariable UUID id) {
@@ -70,5 +78,4 @@ public class ShipmentController {
         shipmentService.delete(id);
         return ResponseEntity.noContent().build();
     }
-
 }

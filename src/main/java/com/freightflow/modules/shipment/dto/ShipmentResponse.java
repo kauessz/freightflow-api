@@ -18,6 +18,7 @@ public record ShipmentResponse(
     String destinationPortUnlocode,
     String vesselName,
     String voyageNumber,
+    Instant eta,
     Instant createdAt,
     Instant updatedAt
 ) {
@@ -34,6 +35,7 @@ public record ShipmentResponse(
             shipment.getDestinationPort().getUnlocode(),
             shipment.getVoyage().getVessel().getName(),
             shipment.getVoyage().getVoyageNumber(),
+            shipment.getVoyage().getEta(),
             shipment.getCreatedAt(),
             shipment.getUpdatedAt()
         );

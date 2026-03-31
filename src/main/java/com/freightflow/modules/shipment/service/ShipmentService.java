@@ -7,8 +7,10 @@ import com.freightflow.modules.port.PortRepository;
 import com.freightflow.modules.shipment.Shipment;
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
+import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
 import com.freightflow.modules.shipment.dto.TrackingResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
+import com.freightflow.modules.shipment.enums.ShipmentStatus;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.voyage.Voyage;
 import com.freightflow.modules.voyage.VoyageRepository;
@@ -21,6 +23,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -29,6 +35,13 @@ import java.util.stream.Collectors;
 public class ShipmentService {
 
     private static final Logger log = LoggerFactory.getLogger(ShipmentService.class);
+
+    private static final List<ShipmentStatus> FINISHED_STATUSES = List.of(
+            ShipmentStatus.ARRIVED,
+            ShipmentStatus.DELIVERED,
+            ShipmentStatus.GATE_OUT,
+            ShipmentStatus.CANCELLED
+    );
 
     private final ShipmentRepository shipmentRepository;
     private final VoyageRepository voyageRepository;
@@ -68,9 +81,15 @@ public class ShipmentService {
         Shipment shipment = shipmentRepository.findByBookingWithDetails(booking)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment", booking));
 
+        // Eventos em ordem cronológica ASC para a timeline
         var events = shipment.getEvents().stream()
+                .sorted(Comparator.comparing(e -> e.getOccurredAt()))
                 .map(e -> new TrackingResponse.TrackingEvent(
-                        e.getType(), e.getLocation(), e.getOccurredAt(), e.getDescription()))
+                        e.getType(),
+                        e.getLocation(),
+                        e.getOccurredAt(),
+                        e.getReportedAt(),
+                        e.getDescription()))
                 .collect(Collectors.toList());
 
         return new TrackingResponse(
@@ -78,12 +97,34 @@ public class ShipmentService {
                 shipment.getContainerNumber(),
                 shipment.getStatus(),
                 shipment.getVoyage().getVessel().getName(),
+                shipment.getVoyage().getVoyageNumber(),
                 shipment.getOriginPort().getName(),
+                shipment.getOriginPort().getUnlocode(),
                 shipment.getDestinationPort().getName(),
+                shipment.getDestinationPort().getUnlocode(),
                 shipment.getVoyage().getEtd(),
                 shipment.getVoyage().getEta(),
                 events
         );
+    }
+
+    /**
+     * KPIs agregados do tenant para o dashboard.
+     */
+    public ShipmentStatsResponse getStats(UUID tenantId) {
+        log.debug("Computing shipment stats for tenant={}", tenantId);
+
+        long total = shipmentRepository.countByTenantId(tenantId);
+        long inTransit = shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.IN_TRANSIT);
+        long arrived = shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED);
+
+        Instant now = Instant.now();
+        long delayed = shipmentRepository.countDelayed(tenantId, now, FINISHED_STATUSES);
+
+        Instant deadline = now.plus(48, ChronoUnit.HOURS);
+        long atRisk = shipmentRepository.countAtRisk(tenantId, now, deadline, ShipmentStatus.IN_TRANSIT);
+
+        return new ShipmentStatsResponse(total, inTransit, arrived, delayed, atRisk);
     }
 
     // ==================== Commands ====================
@@ -92,7 +133,6 @@ public class ShipmentService {
     public ShipmentResponse create(CreateShipmentRequest request, UUID tenantId) {
         log.info("Creating shipment booking={} for tenant={}", request.booking(), tenantId);
 
-        // Regra de negocio: booking unico
         if (shipmentRepository.existsByBooking(request.booking())) {
             throw new BusinessException("Booking " + request.booking() + " already exists");
         }
