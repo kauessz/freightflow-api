@@ -8,7 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,34 +24,30 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
 
     Page<Shipment> findByTenantIdAndStatus(UUID tenantId, ShipmentStatus status, Pageable pageable);
 
+    /** CLIENT role: filtra apenas embarques do cliente vinculado ao usuário. */
+    Page<Shipment> findByTenantIdAndCustomerId(UUID tenantId, UUID customerId, Pageable pageable);
+
     long countByTenantId(UUID tenantId);
 
     long countByTenantIdAndStatus(UUID tenantId, ShipmentStatus status);
 
     /**
-     * Embarques com ETA já ultrapassada que ainda não chegaram.
-     * Exclui statuses finais: ARRIVED, DELIVERED, GATE_OUT, CANCELLED.
+     * Embarques com delay_days > 0 e ainda em trânsito (não finalizados).
      */
-    @Query("SELECT COUNT(s) FROM Shipment s JOIN s.voyage v " +
-           "WHERE s.tenant.id = :tenantId " +
-           "AND v.eta < :now " +
-           "AND s.status NOT IN :finishedStatuses")
-    long countDelayed(@Param("tenantId") UUID tenantId,
-                      @Param("now") Instant now,
-                      @Param("finishedStatuses") List<ShipmentStatus> finishedStatuses);
-
-    /**
-     * Embarques IN_TRANSIT com ETA entre now e now+48h (em risco de atraso).
-     */
-    @Query("SELECT COUNT(s) FROM Shipment s JOIN s.voyage v " +
+    @Query("SELECT COUNT(s) FROM Shipment s " +
            "WHERE s.tenant.id = :tenantId " +
            "AND s.status = :status " +
-           "AND v.eta >= :now " +
-           "AND v.eta <= :deadline")
-    long countAtRisk(@Param("tenantId") UUID tenantId,
-                     @Param("now") Instant now,
-                     @Param("deadline") Instant deadline,
-                     @Param("status") ShipmentStatus status);
+           "AND s.delayDays > 0")
+    long countDelayed(@Param("tenantId") UUID tenantId,
+                      @Param("status") ShipmentStatus status);
+
+    /**
+     * Embarques com risk_level HIGH ou CRITICAL.
+     */
+    @Query("SELECT COUNT(s) FROM Shipment s " +
+           "WHERE s.tenant.id = :tenantId " +
+           "AND s.riskLevel IN ('HIGH', 'CRITICAL')")
+    long countAtRisk(@Param("tenantId") UUID tenantId);
 
     @Query("SELECT s FROM Shipment s " +
            "JOIN FETCH s.voyage v " +

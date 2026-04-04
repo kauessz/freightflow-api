@@ -69,11 +69,11 @@ public final class TestDataFactory {
     // ==================== UserPrincipal ====================
 
     public static UserPrincipal principal() {
-        return new UserPrincipal(DEFAULT_USER_ID, "kaue@mercosul.com", null, DEFAULT_TENANT_ID, "ADMIN");
+        return new UserPrincipal(DEFAULT_USER_ID, "kaue@mercosul.com", null, DEFAULT_TENANT_ID, "ADMIN", null);
     }
 
     public static UserPrincipal principal(UUID userId, UUID tenantId) {
-        return new UserPrincipal(userId, "user@test.com", null, tenantId, "ADMIN");
+        return new UserPrincipal(userId, "user@test.com", null, tenantId, "ADMIN", null);
     }
 
     // ==================== Port ====================

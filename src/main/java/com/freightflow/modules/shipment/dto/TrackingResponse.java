@@ -17,6 +17,15 @@ public record TrackingResponse(
     String destinationPortUnlocode,
     Instant etd,
     Instant eta,
+    // Campos operacionais visíveis ao cliente
+    String houseBl,
+    String masterBl,
+    String incoterm,
+    String cargoDescription,
+    String documentStatus,
+    String customsStatus,
+    String riskLevel,
+    Integer delayDays,
     List<TrackingEvent> events
 ) {
     public record TrackingEvent(

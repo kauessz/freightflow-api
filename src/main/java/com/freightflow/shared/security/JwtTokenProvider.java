@@ -38,17 +38,24 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Gera um access token JWT contendo id, email, tenantId e role do usuario.
+     * Gera access token JWT com: id, email, tenantId, role e customerId (opcional).
+     * customerId é preenchido apenas para usuarios com role CLIENT.
      */
     public String generateAccessToken(UserPrincipal principal) {
         Instant now = Instant.now();
         Instant expiry = now.plusMillis(expirationMs);
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(principal.getId().toString())
                 .claim("email", principal.getEmail())
                 .claim("tenantId", principal.getTenantId().toString())
-                .claim("role", principal.getRole())
+                .claim("role", principal.getRole());
+
+        if (principal.getCustomerId() != null) {
+            builder.claim("customerId", principal.getCustomerId().toString());
+        }
+
+        return builder
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .signWith(secretKey)
@@ -91,14 +98,18 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Extrai o UserPrincipal a partir das claims do token.
+     * Extrai UserPrincipal a partir das claims do token.
+     * customerId pode ser null (roles ADMIN/OPERATOR/VIEWER nao carregam).
      */
     public UserPrincipal getUserPrincipalFromClaims(Claims claims) {
-        UUID userId = UUID.fromString(claims.getSubject());
-        String email = claims.get("email", String.class);
+        UUID userId   = UUID.fromString(claims.getSubject());
+        String email  = claims.get("email", String.class);
         UUID tenantId = UUID.fromString(claims.get("tenantId", String.class));
-        String role = claims.get("role", String.class);
+        String role   = claims.get("role", String.class);
 
-        return UserPrincipal.fromToken(userId, email, tenantId, role);
+        String customerIdStr = claims.get("customerId", String.class);
+        UUID customerId = (customerIdStr != null) ? UUID.fromString(customerIdStr) : null;
+
+        return UserPrincipal.fromToken(userId, email, tenantId, role, customerId);
     }
 }

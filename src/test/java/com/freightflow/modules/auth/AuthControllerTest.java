@@ -196,6 +196,7 @@ class AuthControllerTest {
             UserResponse userResponse = new UserResponse(
                     principal.getId().toString(), "Kaue", "kaue@mercosul.com", "ADMIN",
                     principal.getTenantId().toString(), "Mercosul Line",
+                    null, null, true,
                     Instant.now(), Instant.now()
             );
             when(authService.me(principal.getId())).thenReturn(userResponse);

@@ -15,21 +15,24 @@ public class UserPrincipal implements UserDetails {
     private final String password;
     private final UUID tenantId;
     private final String role;
+    /** Non-null only for CLIENT role — scopes shipment visibility */
+    private final UUID customerId;
 
-    public UserPrincipal(UUID id, String email, String password, UUID tenantId, String role) {
+    public UserPrincipal(UUID id, String email, String password, UUID tenantId, String role, UUID customerId) {
         this.id = id;
         this.email = email;
         this.password = password;
         this.tenantId = tenantId;
         this.role = role;
+        this.customerId = customerId;
     }
 
     /**
      * Factory method para criar UserPrincipal a partir do token JWT
      * (sem password, usado apenas para autenticacao via token).
      */
-    public static UserPrincipal fromToken(UUID id, String email, UUID tenantId, String role) {
-        return new UserPrincipal(id, email, null, tenantId, role);
+    public static UserPrincipal fromToken(UUID id, String email, UUID tenantId, String role, UUID customerId) {
+        return new UserPrincipal(id, email, null, tenantId, role, customerId);
     }
 
     // ==================== UserDetails ====================
@@ -66,4 +69,6 @@ public class UserPrincipal implements UserDetails {
     public UUID getTenantId() { return tenantId; }
 
     public String getRole() { return role; }
+
+    public UUID getCustomerId() { return customerId; }
 }

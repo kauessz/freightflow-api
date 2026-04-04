@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -53,11 +54,28 @@ class ShipmentControllerTest {
 
     private ShipmentResponse sampleResponse() {
         return new ShipmentResponse(
-                TestDataFactory.defaultShipmentId(), "A123456789", "MSCU1234567",
-                ContainerType.TEU40, ShipmentStatus.BOOKED,
-                "Santos", "BRSSZ", "Rotterdam", "NLRTM",
-                "MSC Oscar", "MSC-2026-001",
+                TestDataFactory.defaultShipmentId(),
+                "A123456789",
+                // documentos
+                "HBL123456", "MBL789012", "REF-001",
+                // container
+                "MSCU1234567", ContainerType.TEU40, 40, "GP",
+                BigDecimal.valueOf(24000), BigDecimal.valueOf(22000), BigDecimal.valueOf(38.5),
+                400, "cartons",
+                // status
+                ShipmentStatus.BOOKED,
+                "PENDING", "NOT_STARTED", "LOW", 0,
+                // portos
+                "Santos", "BRSSZ", "Rotterdam", "NLRTM", null, null,
+                // partes
+                "Shipper SA", "Consignee NV", "Notify Party NV", "Marina Rocha",
+                // voyage
+                "MSC Oscar", "MSC-2026-001", "MSC", "South America Loop",
                 Instant.now().plusSeconds(86400),
+                // comercial
+                "CIF", "Prepaid", "General cargo",
+                // misc
+                "https://www.vesselfinder.com/vessels/details/9282261", "Direct service.",
                 Instant.now(), Instant.now()
         );
     }
@@ -144,11 +162,19 @@ class ShipmentControllerTest {
             );
 
             ShipmentResponse response = new ShipmentResponse(
-                    UUID.randomUUID(), "B987654321", "CMAU7654321",
-                    ContainerType.TEU40HC, ShipmentStatus.BOOKED,
-                    "Santos", "BRSSZ", "Rotterdam", "NLRTM",
-                    "MSC Oscar", "MSC-2026-001",
+                    UUID.randomUUID(),
+                    "B987654321",
+                    null, null, null,
+                    "CMAU7654321", ContainerType.TEU40HC, 40, "HC",
+                    null, null, null, null, null,
+                    ShipmentStatus.BOOKED,
+                    "PENDING", "NOT_STARTED", "LOW", 0,
+                    "Santos", "BRSSZ", "Rotterdam", "NLRTM", null, null,
+                    "Shipper", "Consignee", null, null,
+                    "MSC Oscar", "MSC-2026-001", "MSC", null,
                     Instant.now().plusSeconds(86400),
+                    null, null, null,
+                    null, null,
                     Instant.now(), Instant.now()
             );
 

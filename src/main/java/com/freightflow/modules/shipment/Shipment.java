@@ -9,6 +9,7 @@ import com.freightflow.modules.shipment.enums.ContainerType;
 import com.freightflow.modules.event.Event;
 import com.freightflow.modules.event.enums.EventType;
 import com.freightflow.modules.alert.Alert;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +25,17 @@ public class Shipment {
     @Column(nullable = false, unique = true)
     private String booking;
 
+    // Documentos BL
+    @Column(length = 50)
+    private String houseBl;
+
+    @Column(length = 50)
+    private String masterBl;
+
+    @Column(length = 50)
+    private String customerReference;
+
+    // Container
     @Column(length = 11)
     private String containerNumber;
 
@@ -31,6 +43,28 @@ public class Shipment {
     @Enumerated(EnumType.STRING)
     private ContainerType containerType;
 
+    @Column
+    private Integer containerSizeFt;
+
+    @Column(length = 10)
+    private String containerIsoCode;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal grossWeightKg;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal netWeightKg;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal volumeCbm;
+
+    @Column
+    private Integer packages;
+
+    @Column(length = 50)
+    private String packageType;
+
+    // Relações
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "voyage_id", nullable = false)
     private Voyage voyage;
@@ -44,18 +78,66 @@ public class Shipment {
     private Port destinationPort;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transshipment_port_id")
+    private Port transshipmentPort;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private com.freightflow.modules.customer.Customer customer;
+
+    // Partes
     @Column
     private String consignee;
 
     @Column
     private String shipper;
 
+    @Column(length = 255)
+    private String notifyParty;
+
+    @Column(length = 100)
+    private String operatorName;
+
+    // Dados operacionais
+    @Column(length = 10)
+    private String incoterm;
+
+    @Column(length = 20)
+    private String freightTerm;
+
+    @Column(length = 255)
+    private String cargoDescription;
+
+    @Column(length = 100)
+    private String serviceLane;
+
+    // Status operacionais
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private ShipmentStatus status;
+
+    @Column(length = 30)
+    private String documentStatus = "PENDING";
+
+    @Column(length = 30)
+    private String customsStatus = "NOT_STARTED";
+
+    @Column(length = 20)
+    private String riskLevel = "LOW";
+
+    @Column
+    private Integer delayDays = 0;
+
+    // AIS / notas
+    @Column(length = 500)
+    private String vesselSourceUrl;
+
+    @Column(columnDefinition = "TEXT")
+    private String notes;
 
     @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("occurredAt DESC")
@@ -113,25 +195,53 @@ public class Shipment {
         return alerts.stream().anyMatch(alert -> !alert.isResolved());
     }
 
-    public UUID getId() {
-        return id;
-    }
+    // ==================== Getters ====================
 
-    public String getBooking() {
-        return booking;
-    }
+    public UUID getId() { return id; }
+    public String getBooking() { return booking; }
+    public String getHouseBl() { return houseBl; }
+    public String getMasterBl() { return masterBl; }
+    public String getCustomerReference() { return customerReference; }
+    public String getContainerNumber() { return containerNumber; }
+    public ContainerType getContainerType() { return containerType; }
+    public Integer getContainerSizeFt() { return containerSizeFt; }
+    public String getContainerIsoCode() { return containerIsoCode; }
+    public BigDecimal getGrossWeightKg() { return grossWeightKg; }
+    public BigDecimal getNetWeightKg() { return netWeightKg; }
+    public BigDecimal getVolumeCbm() { return volumeCbm; }
+    public Integer getPackages() { return packages; }
+    public String getPackageType() { return packageType; }
+    public Voyage getVoyage() { return voyage; }
+    public Port getOriginPort() { return originPort; }
+    public Port getDestinationPort() { return destinationPort; }
+    public Port getTransshipmentPort() { return transshipmentPort; }
+    public Tenant getTenant() { return tenant; }
+    public com.freightflow.modules.customer.Customer getCustomer() { return customer; }
+    public String getConsignee() { return consignee; }
+    public String getShipper() { return shipper; }
+    public String getNotifyParty() { return notifyParty; }
+    public String getOperatorName() { return operatorName; }
+    public String getIncoterm() { return incoterm; }
+    public String getFreightTerm() { return freightTerm; }
+    public String getCargoDescription() { return cargoDescription; }
+    public String getServiceLane() { return serviceLane; }
+    public ShipmentStatus getStatus() { return status; }
+    public String getDocumentStatus() { return documentStatus; }
+    public String getCustomsStatus() { return customsStatus; }
+    public String getRiskLevel() { return riskLevel; }
+    public Integer getDelayDays() { return delayDays; }
+    public String getVesselSourceUrl() { return vesselSourceUrl; }
+    public String getNotes() { return notes; }
+    public List<Event> getEvents() { return events; }
+    public List<Alert> getAlerts() { return alerts; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 
-    public String getContainerNumber() {
-        return containerNumber;
-    }
+    // ==================== Setters ====================
 
     public void setContainerNumber(String containerNumber) {
         this.containerNumber = containerNumber;
         this.updatedAt = Instant.now();
-    }
-
-    public ContainerType getContainerType() {
-        return containerType;
     }
 
     public void setContainerType(ContainerType containerType) {
@@ -139,33 +249,9 @@ public class Shipment {
         this.updatedAt = Instant.now();
     }
 
-    public Voyage getVoyage() {
-        return voyage;
-    }
-
-    public Port getOriginPort() {
-        return originPort;
-    }
-
-    public Port getDestinationPort() {
-        return destinationPort;
-    }
-
-    public Tenant getTenant() {
-        return tenant;
-    }
-
-    public String getConsignee() {
-        return consignee;
-    }
-
     public void setConsignee(String consignee) {
         this.consignee = consignee;
         this.updatedAt = Instant.now();
-    }
-
-    public String getShipper() {
-        return shipper;
     }
 
     public void setShipper(String shipper) {
@@ -173,28 +259,31 @@ public class Shipment {
         this.updatedAt = Instant.now();
     }
 
-    public ShipmentStatus getStatus() {
-        return status;
-    }
-
     public void setStatus(ShipmentStatus status) {
         this.status = status;
         this.updatedAt = Instant.now();
     }
 
-    public List<Event> getEvents() {
-        return events;
-    }
-
-    public List<Alert> getAlerts() {
-        return alerts;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
+    public void setHouseBl(String houseBl) { this.houseBl = houseBl; this.updatedAt = Instant.now(); }
+    public void setMasterBl(String masterBl) { this.masterBl = masterBl; this.updatedAt = Instant.now(); }
+    public void setCustomerReference(String customerReference) { this.customerReference = customerReference; this.updatedAt = Instant.now(); }
+    public void setNotifyParty(String notifyParty) { this.notifyParty = notifyParty; this.updatedAt = Instant.now(); }
+    public void setOperatorName(String operatorName) { this.operatorName = operatorName; this.updatedAt = Instant.now(); }
+    public void setIncoterm(String incoterm) { this.incoterm = incoterm; this.updatedAt = Instant.now(); }
+    public void setFreightTerm(String freightTerm) { this.freightTerm = freightTerm; this.updatedAt = Instant.now(); }
+    public void setCargoDescription(String cargoDescription) { this.cargoDescription = cargoDescription; this.updatedAt = Instant.now(); }
+    public void setServiceLane(String serviceLane) { this.serviceLane = serviceLane; this.updatedAt = Instant.now(); }
+    public void setDocumentStatus(String documentStatus) { this.documentStatus = documentStatus; this.updatedAt = Instant.now(); }
+    public void setCustomsStatus(String customsStatus) { this.customsStatus = customsStatus; this.updatedAt = Instant.now(); }
+    public void setRiskLevel(String riskLevel) { this.riskLevel = riskLevel; this.updatedAt = Instant.now(); }
+    public void setDelayDays(Integer delayDays) { this.delayDays = delayDays; this.updatedAt = Instant.now(); }
+    public void setVesselSourceUrl(String vesselSourceUrl) { this.vesselSourceUrl = vesselSourceUrl; this.updatedAt = Instant.now(); }
+    public void setNotes(String notes) { this.notes = notes; this.updatedAt = Instant.now(); }
+    public void setContainerSizeFt(Integer containerSizeFt) { this.containerSizeFt = containerSizeFt; this.updatedAt = Instant.now(); }
+    public void setContainerIsoCode(String containerIsoCode) { this.containerIsoCode = containerIsoCode; this.updatedAt = Instant.now(); }
+    public void setGrossWeightKg(BigDecimal grossWeightKg) { this.grossWeightKg = grossWeightKg; this.updatedAt = Instant.now(); }
+    public void setNetWeightKg(BigDecimal netWeightKg) { this.netWeightKg = netWeightKg; this.updatedAt = Instant.now(); }
+    public void setVolumeCbm(BigDecimal volumeCbm) { this.volumeCbm = volumeCbm; this.updatedAt = Instant.now(); }
+    public void setPackages(Integer packages) { this.packages = packages; this.updatedAt = Instant.now(); }
+    public void setPackageType(String packageType) { this.packageType = packageType; this.updatedAt = Instant.now(); }
 }

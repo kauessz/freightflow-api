@@ -141,12 +141,14 @@ public class AuthService {
     // ==================== Helpers ====================
 
     private AuthResponse buildAuthResponse(User user) {
+        UUID customerId = (user.getCustomer() != null) ? user.getCustomer().getId() : null;
         UserPrincipal principal = new UserPrincipal(
                 user.getId(),
                 user.getEmail(),
                 user.getPasswordHash(),
                 user.getTenant().getId(),
-                user.getRole().name()
+                user.getRole().name(),
+                customerId
         );
 
         String accessToken = jwtTokenProvider.generateAccessToken(principal);

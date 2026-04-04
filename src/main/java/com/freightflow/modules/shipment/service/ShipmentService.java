@@ -23,8 +23,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -66,6 +64,16 @@ public class ShipmentService {
         return PageResponse.from(page.map(ShipmentResponse::from));
     }
 
+    /**
+     * Variante usada pelo ShipmentController para role CLIENT:
+     * restringe a visibilidade ao customer_id do principal.
+     */
+    public PageResponse<ShipmentResponse> listForClient(UUID tenantId, UUID customerId, Pageable pageable) {
+        log.debug("Listing shipments for tenant={} customer={}", tenantId, customerId);
+        var page = shipmentRepository.findByTenantIdAndCustomerId(tenantId, customerId, pageable);
+        return PageResponse.from(page.map(ShipmentResponse::from));
+    }
+
     public ShipmentResponse getById(UUID id) {
         log.debug("Fetching shipment id={}", id);
         return ShipmentResponse.from(getEntityById(id));
@@ -81,7 +89,6 @@ public class ShipmentService {
         Shipment shipment = shipmentRepository.findByBookingWithDetails(booking)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment", booking));
 
-        // Eventos em ordem cronológica ASC para a timeline
         var events = shipment.getEvents().stream()
                 .sorted(Comparator.comparing(e -> e.getOccurredAt()))
                 .map(e -> new TrackingResponse.TrackingEvent(
@@ -104,25 +111,31 @@ public class ShipmentService {
                 shipment.getDestinationPort().getUnlocode(),
                 shipment.getVoyage().getEtd(),
                 shipment.getVoyage().getEta(),
+                shipment.getHouseBl(),
+                shipment.getMasterBl(),
+                shipment.getIncoterm(),
+                shipment.getCargoDescription(),
+                shipment.getDocumentStatus(),
+                shipment.getCustomsStatus(),
+                shipment.getRiskLevel(),
+                shipment.getDelayDays(),
                 events
         );
     }
 
     /**
      * KPIs agregados do tenant para o dashboard.
+     * - delayed: embarques com delay_days > 0 que ainda estão em trânsito
+     * - atRisk: embarques com risk_level HIGH ou CRITICAL
      */
     public ShipmentStatsResponse getStats(UUID tenantId) {
         log.debug("Computing shipment stats for tenant={}", tenantId);
 
-        long total = shipmentRepository.countByTenantId(tenantId);
+        long total     = shipmentRepository.countByTenantId(tenantId);
         long inTransit = shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.IN_TRANSIT);
-        long arrived = shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED);
-
-        Instant now = Instant.now();
-        long delayed = shipmentRepository.countDelayed(tenantId, now, FINISHED_STATUSES);
-
-        Instant deadline = now.plus(48, ChronoUnit.HOURS);
-        long atRisk = shipmentRepository.countAtRisk(tenantId, now, deadline, ShipmentStatus.IN_TRANSIT);
+        long arrived   = shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED);
+        long delayed   = shipmentRepository.countDelayed(tenantId, ShipmentStatus.IN_TRANSIT);
+        long atRisk    = shipmentRepository.countAtRisk(tenantId);
 
         return new ShipmentStatsResponse(total, inTransit, arrived, delayed, atRisk);
     }
@@ -165,21 +178,12 @@ public class ShipmentService {
         log.info("Updating shipment id={}", id);
         Shipment shipment = getEntityById(id);
 
-        if (request.containerNumber() != null) {
-            shipment.setContainerNumber(request.containerNumber());
-        }
-        if (request.containerType() != null) {
-            shipment.setContainerType(request.containerType());
-        }
-        if (request.consignee() != null) {
-            shipment.setConsignee(request.consignee());
-        }
-        if (request.shipper() != null) {
-            shipment.setShipper(request.shipper());
-        }
+        if (request.containerNumber() != null) shipment.setContainerNumber(request.containerNumber());
+        if (request.containerType() != null)   shipment.setContainerType(request.containerType());
+        if (request.consignee() != null)        shipment.setConsignee(request.consignee());
+        if (request.shipper() != null)          shipment.setShipper(request.shipper());
 
-        Shipment saved = shipmentRepository.save(shipment);
-        return ShipmentResponse.from(saved);
+        return ShipmentResponse.from(shipmentRepository.save(shipment));
     }
 
     @Transactional

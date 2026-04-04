@@ -30,8 +30,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -286,10 +284,9 @@ class ShipmentServiceTest {
                     .thenReturn(4L);
             when(shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED))
                     .thenReturn(3L);
-            when(shipmentRepository.countDelayed(eq(tenantId), any(Instant.class), anyList()))
+            when(shipmentRepository.countDelayed(eq(tenantId), eq(ShipmentStatus.IN_TRANSIT)))
                     .thenReturn(2L);
-            when(shipmentRepository.countAtRisk(
-                    eq(tenantId), any(Instant.class), any(Instant.class), eq(ShipmentStatus.IN_TRANSIT)))
+            when(shipmentRepository.countAtRisk(eq(tenantId)))
                     .thenReturn(1L);
 
             ShipmentStatsResponse stats = shipmentService.getStats(tenantId);
@@ -311,10 +308,9 @@ class ShipmentServiceTest {
                     .thenReturn(0L);
             when(shipmentRepository.countByTenantIdAndStatus(tenantId, ShipmentStatus.ARRIVED))
                     .thenReturn(0L);
-            when(shipmentRepository.countDelayed(eq(tenantId), any(Instant.class), anyList()))
+            when(shipmentRepository.countDelayed(eq(tenantId), eq(ShipmentStatus.IN_TRANSIT)))
                     .thenReturn(0L);
-            when(shipmentRepository.countAtRisk(
-                    eq(tenantId), any(Instant.class), any(Instant.class), eq(ShipmentStatus.IN_TRANSIT)))
+            when(shipmentRepository.countAtRisk(eq(tenantId)))
                     .thenReturn(0L);
 
             ShipmentStatsResponse stats = shipmentService.getStats(tenantId);
@@ -325,52 +321,35 @@ class ShipmentServiceTest {
         }
 
         @Test
-        @DisplayName("Deve passar janela de 48h para countAtRisk")
-        void devePassarJanela48hParaAtRisk() {
+        @DisplayName("Deve contar apenas IN_TRANSIT para delayed")
+        void deveContarApenasInTransitParaDelayed() {
             UUID tenantId = tenant.getId();
 
             when(shipmentRepository.countByTenantId(tenantId)).thenReturn(5L);
             when(shipmentRepository.countByTenantIdAndStatus(any(), any())).thenReturn(0L);
-            when(shipmentRepository.countDelayed(any(), any(), any())).thenReturn(0L);
-            when(shipmentRepository.countAtRisk(any(), any(), any(), any())).thenReturn(0L);
+            when(shipmentRepository.countDelayed(any(), any())).thenReturn(3L);
+            when(shipmentRepository.countAtRisk(any())).thenReturn(0L);
 
-            shipmentService.getStats(tenantId);
+            ShipmentStatsResponse stats = shipmentService.getStats(tenantId);
 
-            // Verifica que countAtRisk recebeu deadline aproximadamente 48h à frente
-            verify(shipmentRepository).countAtRisk(
-                    eq(tenantId),
-                    argThat(now -> now.isBefore(Instant.now().plusSeconds(5))),
-                    argThat(deadline -> {
-                        Instant expected = Instant.now().plus(48, ChronoUnit.HOURS);
-                        // Tolerância de 10 segundos
-                        return Math.abs(deadline.toEpochMilli() - expected.toEpochMilli()) < 10_000;
-                    }),
-                    eq(ShipmentStatus.IN_TRANSIT)
-            );
+            verify(shipmentRepository).countDelayed(eq(tenantId), eq(ShipmentStatus.IN_TRANSIT));
+            assertThat(stats.delayed()).isEqualTo(3L);
         }
 
         @Test
-        @DisplayName("Deve excluir statuses finais no calculo de delayed")
-        void deveExcluirStatususFinaisEmDelayed() {
+        @DisplayName("Deve contar HIGH e CRITICAL para atRisk")
+        void deveContarHighECriticalParaAtRisk() {
             UUID tenantId = tenant.getId();
 
             when(shipmentRepository.countByTenantId(any())).thenReturn(0L);
             when(shipmentRepository.countByTenantIdAndStatus(any(), any())).thenReturn(0L);
-            when(shipmentRepository.countDelayed(any(), any(), any())).thenReturn(0L);
-            when(shipmentRepository.countAtRisk(any(), any(), any(), any())).thenReturn(0L);
+            when(shipmentRepository.countDelayed(any(), any())).thenReturn(0L);
+            when(shipmentRepository.countAtRisk(eq(tenantId))).thenReturn(5L);
 
-            shipmentService.getStats(tenantId);
+            ShipmentStatsResponse stats = shipmentService.getStats(tenantId);
 
-            verify(shipmentRepository).countDelayed(
-                    eq(tenantId),
-                    any(Instant.class),
-                    argThat(statuses ->
-                        statuses.contains(ShipmentStatus.ARRIVED) &&
-                        statuses.contains(ShipmentStatus.DELIVERED) &&
-                        statuses.contains(ShipmentStatus.GATE_OUT) &&
-                        statuses.contains(ShipmentStatus.CANCELLED)
-                    )
-            );
+            verify(shipmentRepository).countAtRisk(eq(tenantId));
+            assertThat(stats.atRisk()).isEqualTo(5L);
         }
     }
 }

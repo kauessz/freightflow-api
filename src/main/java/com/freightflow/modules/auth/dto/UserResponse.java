@@ -11,10 +11,15 @@ public record UserResponse(
     String role,
     String tenantId,
     String tenantName,
+    String customerId,
+    String customerName,
+    boolean active,
     Instant lastLoginAt,
     Instant createdAt
 ) {
     public static UserResponse from(User user) {
+        String customerId   = user.getCustomer() != null ? user.getCustomer().getId().toString() : null;
+        String customerName = user.getCustomer() != null ? user.getCustomer().getName() : null;
         return new UserResponse(
             user.getId().toString(),
             user.getName(),
@@ -22,6 +27,9 @@ public record UserResponse(
             user.getRole().name(),
             user.getTenant().getId().toString(),
             user.getTenant().getName(),
+            customerId,
+            customerName,
+            user.isActive(),
             user.getLastLoginAt(),
             user.getCreatedAt()
         );

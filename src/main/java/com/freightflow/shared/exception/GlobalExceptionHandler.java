@@ -37,6 +37,14 @@ public class GlobalExceptionHandler {
         return detail;
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ProblemDetail handleForbidden(ForbiddenException ex, WebRequest request) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        detail.setTitle("Forbidden");
+        detail.setType(URI.create("https://api.freightflow.com/errors/forbidden"));
+        return detail;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex, WebRequest request) {
         String fieldErrors = ex.getBindingResult().getFieldErrors().stream()

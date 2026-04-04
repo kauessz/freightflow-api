@@ -6,6 +6,7 @@ import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
 import com.freightflow.modules.shipment.service.ShipmentService;
 import com.freightflow.shared.pagination.PageResponse;
+import com.freightflow.shared.rbac.RequiresRole;
 import com.freightflow.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,16 +34,21 @@ public class ShipmentController {
     }
 
     @GetMapping
-    @Operation(summary = "List shipments", description = "Paginated list filtered by tenant")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
+    @Operation(summary = "List shipments", description = "Paginated list. CLIENT role sees only their customer's shipments.")
     public ResponseEntity<PageResponse<ShipmentResponse>> list(
             @AuthenticationPrincipal UserPrincipal user,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
+        if ("CLIENT".equals(user.getRole()) && user.getCustomerId() != null) {
+            return ResponseEntity.ok(shipmentService.listForClient(user.getTenantId(), user.getCustomerId(), pageable));
+        }
         return ResponseEntity.ok(shipmentService.list(user.getTenantId(), pageable));
     }
 
     @GetMapping("/stats")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER"})
     @Operation(summary = "Get shipment KPI stats", description = "Returns total, inTransit, arrived, delayed and atRisk counts for the tenant")
     public ResponseEntity<ShipmentStatsResponse> getStats(
             @AuthenticationPrincipal UserPrincipal user) {
@@ -50,12 +56,14 @@ public class ShipmentController {
     }
 
     @GetMapping("/{id}")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
     @Operation(summary = "Get shipment by ID")
     public ResponseEntity<ShipmentResponse> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(shipmentService.getById(id));
     }
 
     @PostMapping
+    @RequiresRole({"ADMIN", "OPERATOR"})
     @Operation(summary = "Create a new shipment")
     public ResponseEntity<ShipmentResponse> create(
             @Valid @RequestBody CreateShipmentRequest request,
@@ -65,6 +73,7 @@ public class ShipmentController {
     }
 
     @PutMapping("/{id}")
+    @RequiresRole({"ADMIN", "OPERATOR"})
     @Operation(summary = "Update an existing shipment")
     public ResponseEntity<ShipmentResponse> update(
             @PathVariable UUID id,
@@ -73,6 +82,7 @@ public class ShipmentController {
     }
 
     @DeleteMapping("/{id}")
+    @RequiresRole("ADMIN")
     @Operation(summary = "Delete a shipment")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         shipmentService.delete(id);
