@@ -1,8 +1,15 @@
 package com.freightflow.modules.vessel;
 
+import com.freightflow.modules.ais.VesselPositionResolver;
+import com.freightflow.modules.ais.dto.AisPositionResponse;
+import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.vessel.dto.CreateVesselRequest;
 import com.freightflow.modules.vessel.dto.UpdateVesselRequest;
 import com.freightflow.modules.vessel.dto.VesselResponse;
+import com.freightflow.modules.vessel.dto.VesselWithVoyageResponse;
+import com.freightflow.modules.voyage.Voyage;
+import com.freightflow.modules.voyage.VoyageRepository;
+import com.freightflow.modules.voyage.enums.VoyageStatus;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
 import com.freightflow.shared.pagination.PageResponse;
@@ -12,7 +19,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -20,10 +30,19 @@ public class VesselService {
 
     private static final Logger log = LoggerFactory.getLogger(VesselService.class);
 
-    private final VesselRepository vesselRepository;
+    private final VesselRepository    vesselRepository;
+    private final VoyageRepository    voyageRepository;
+    private final ShipmentRepository  shipmentRepository;
+    private final VesselPositionResolver vesselPositionResolver;
 
-    public VesselService(VesselRepository vesselRepository) {
-        this.vesselRepository = vesselRepository;
+    public VesselService(VesselRepository vesselRepository,
+                         VoyageRepository voyageRepository,
+                         ShipmentRepository shipmentRepository,
+                         VesselPositionResolver vesselPositionResolver) {
+        this.vesselRepository   = vesselRepository;
+        this.voyageRepository   = voyageRepository;
+        this.shipmentRepository = shipmentRepository;
+        this.vesselPositionResolver = vesselPositionResolver;
     }
 
     public PageResponse<VesselResponse> list(Pageable pageable) {
@@ -44,6 +63,40 @@ public class VesselService {
         Vessel vessel = vesselRepository.findByImo(imo)
                 .orElseThrow(() -> new ResourceNotFoundException("Vessel", imo));
         return VesselResponse.from(vessel);
+    }
+
+    /**
+     * Returns all active voyages (IN_TRANSIT or DEPARTED) that contain at least
+     * one shipment from the given tenant, enriched with AIS position and shipment count.
+     * Used by the Fleet Map "My shipments" toggle.
+     */
+    public List<VesselWithVoyageResponse> getActiveWithShipments(UUID tenantId, UUID customerId) {
+        log.debug("Fetching active voyages with tenant shipments for tenantId={} customerId={}", tenantId, customerId);
+
+        List<VoyageStatus> activeStatuses = List.of(VoyageStatus.IN_TRANSIT, VoyageStatus.DEPARTED);
+        List<Voyage> voyages = customerId != null
+                ? voyageRepository.findActiveVoyagesWithCustomerShipments(tenantId, customerId, activeStatuses)
+                : voyageRepository.findActiveVoyagesWithTenantShipments(tenantId, activeStatuses);
+
+        if (voyages.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> voyageIds = voyages.stream().map(Voyage::getId).toList();
+        Map<UUID, Integer> shipmentCounts = (customerId != null
+                ? shipmentRepository.countByVoyageIdsAndTenantIdAndCustomerId(voyageIds, tenantId, customerId)
+                : shipmentRepository.countByVoyageIdsAndTenantId(voyageIds, tenantId))
+                .stream()
+                .collect(Collectors.toMap(
+                        ShipmentRepository.VoyageShipmentCountView::getVoyageId,
+                        view -> Math.toIntExact(view.getShipmentCount())
+                ));
+
+        return voyages.stream().map(voyage -> {
+            AisPositionResponse pos = vesselPositionResolver.resolveForVoyage(voyage, true);
+            int shipmentCount = shipmentCounts.getOrDefault(voyage.getId(), 0);
+            return VesselWithVoyageResponse.from(voyage, pos, shipmentCount);
+        }).toList();
     }
 
     @Transactional

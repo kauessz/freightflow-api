@@ -32,7 +32,10 @@ management:
         include: health,info,metrics
   endpoint:
     health:
-      show-details: always
+      # Em dev mostra detalhes; em prod (railway/prod) usa NEVER para não expor
+      # estado de DB, Redis, RabbitMQ sem autenticação.
+      show-details: when-authorized
+      roles: ACTUATOR_ADMIN
 
 springdoc:
   api-docs:

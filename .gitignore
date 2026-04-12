@@ -32,3 +32,9 @@ docker-compose.override.yml
 # ─── Coverage reports (gerados pelo JaCoCo — não commitar) ──────────────────
 target/site/
 target/jacoco.exec
+.m2/
+target/
+
+.m2/
+tm2/
+target/

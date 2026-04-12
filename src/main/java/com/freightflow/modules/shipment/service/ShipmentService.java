@@ -74,11 +74,19 @@ public class ShipmentService {
         return PageResponse.from(page.map(ShipmentResponse::from));
     }
 
-    public ShipmentResponse getById(UUID id) {
-        log.debug("Fetching shipment id={}", id);
-        return ShipmentResponse.from(getEntityById(id));
+    /**
+     * Busca shipment pelo id com isolamento de tenant (previne IDOR).
+     * Retorna 404 se o shipment não pertencer ao tenant do caller —
+     * impede que um tenant veja dados de outro tenant.
+     */
+    public ShipmentResponse getById(UUID id, UUID tenantId) {
+        log.debug("Fetching shipment id={} for tenant={}", id, tenantId);
+        Shipment shipment = shipmentRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Shipment", id));
+        return ShipmentResponse.from(shipment);
     }
 
+    /** Variante interna: busca sem restrição de tenant (usada por EventService). */
     public Shipment getEntityById(UUID id) {
         return shipmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment", id));

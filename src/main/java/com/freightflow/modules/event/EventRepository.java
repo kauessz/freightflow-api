@@ -22,6 +22,14 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     """)
     List<Event> findByShipmentIdOrderByOccurredAtDesc(@Param("shipmentId") UUID shipmentId);
 
+    @Query("""
+        SELECT e FROM Event e
+        JOIN FETCH e.shipment
+        WHERE e.shipment.id = :shipmentId
+        ORDER BY e.occurredAt ASC
+    """)
+    List<Event> findByShipmentIdOrderByOccurredAtAsc(@Param("shipmentId") UUID shipmentId);
+
     @Query(value = """
         SELECT e FROM Event e
         JOIN FETCH e.shipment

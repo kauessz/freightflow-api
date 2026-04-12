@@ -13,23 +13,19 @@ import org.springframework.web.bind.annotation.*;
 @SecurityRequirement(name = "Bearer Authentication")
 public class VesselPositionController {
 
-    private final AisClient aisClient;
+    private final VesselPositionResolver vesselPositionResolver;
 
-    public VesselPositionController(AisClient aisClient) {
-        this.aisClient = aisClient;
+    public VesselPositionController(VesselPositionResolver vesselPositionResolver) {
+        this.vesselPositionResolver = vesselPositionResolver;
     }
 
     @GetMapping("/{imo}/position")
     @Operation(
         summary = "Get vessel AIS position",
         description = "Returns the current AIS position for a vessel by IMO number. "
-            + "Results are cached for 5 minutes."
+            + "Results are cached briefly and return an explicit position source."
     )
     public ResponseEntity<AisPositionResponse> getPosition(@PathVariable String imo) {
-        AisPositionResponse position = aisClient.getPosition(imo);
-        if (position == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(position);
+        return ResponseEntity.ok(vesselPositionResolver.resolveByImo(imo));
     }
 }

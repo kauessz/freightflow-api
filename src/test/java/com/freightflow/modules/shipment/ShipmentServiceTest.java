@@ -107,23 +107,26 @@ class ShipmentServiceTest {
     class GetByIdTests {
 
         @Test
-        @DisplayName("Deve retornar shipment quando encontrado")
+        @DisplayName("Deve retornar shipment quando encontrado no tenant correto")
         void deveRetornarShipmentQuandoEncontrado() {
-            when(shipmentRepository.findById(shipment.getId())).thenReturn(Optional.of(shipment));
+            UUID tenantId = tenant.getId();
+            when(shipmentRepository.findByIdAndTenantId(shipment.getId(), tenantId))
+                    .thenReturn(Optional.of(shipment));
 
-            ShipmentResponse result = shipmentService.getById(shipment.getId());
+            ShipmentResponse result = shipmentService.getById(shipment.getId(), tenantId);
 
             assertThat(result.id()).isEqualTo(shipment.getId());
             assertThat(result.booking()).isEqualTo("A123456789");
         }
 
         @Test
-        @DisplayName("Deve lancar ResourceNotFoundException quando shipment nao encontrado")
-        void deveLancarExcecaoQuandoNaoEncontrado() {
+        @DisplayName("Deve lancar ResourceNotFoundException quando shipment nao encontrado ou pertence a outro tenant")
+        void deveLancarExcecaoQuandoNaoEncontradoOuOutroTenant() {
             UUID id = UUID.randomUUID();
-            when(shipmentRepository.findById(id)).thenReturn(Optional.empty());
+            UUID tenantId = tenant.getId();
+            when(shipmentRepository.findByIdAndTenantId(id, tenantId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> shipmentService.getById(id))
+            assertThatThrownBy(() -> shipmentService.getById(id, tenantId))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Shipment");
         }

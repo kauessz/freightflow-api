@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,4 +47,38 @@ public interface VoyageRepository extends JpaRepository<Voyage, UUID> {
     Page<Voyage> findAllWithDetails(Pageable pageable);
 
     Page<Voyage> findByStatus(VoyageStatus status, Pageable pageable);
+
+    /**
+     * Voyages ativas (IN_TRANSIT ou DEPARTED) que contêm pelo menos um embarque
+     * do tenant informado. Usado no endpoint GET /vessels/active-with-shipments.
+     *
+     * DISTINCT evita duplicatas quando a voyage tem múltiplos shipments do mesmo tenant.
+     */
+    @Query("""
+        SELECT DISTINCT v FROM Voyage v
+        JOIN FETCH v.vessel
+        JOIN FETCH v.originPort
+        JOIN FETCH v.destinationPort
+        JOIN v.shipments s
+        WHERE v.status IN :statuses
+          AND s.tenant.id = :tenantId
+    """)
+    List<Voyage> findActiveVoyagesWithTenantShipments(
+            @Param("tenantId") UUID tenantId,
+            @Param("statuses")  List<VoyageStatus> statuses);
+
+    @Query("""
+        SELECT DISTINCT v FROM Voyage v
+        JOIN FETCH v.vessel
+        JOIN FETCH v.originPort
+        JOIN FETCH v.destinationPort
+        JOIN v.shipments s
+        WHERE v.status IN :statuses
+          AND s.tenant.id = :tenantId
+          AND s.customer.id = :customerId
+    """)
+    List<Voyage> findActiveVoyagesWithCustomerShipments(
+            @Param("tenantId") UUID tenantId,
+            @Param("customerId") UUID customerId,
+            @Param("statuses") List<VoyageStatus> statuses);
 }

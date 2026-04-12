@@ -2,6 +2,7 @@ package com.freightflow.modules.event;
 
 import com.freightflow.modules.event.dto.CreateEventRequest;
 import com.freightflow.modules.event.dto.EventResponse;
+import com.freightflow.modules.event.enums.EventType;
 import com.freightflow.modules.shipment.Shipment;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.shared.exception.BusinessException;
@@ -36,7 +37,7 @@ public class EventService {
         if (!shipmentRepository.existsById(shipmentId)) {
             throw new ResourceNotFoundException("Shipment", shipmentId);
         }
-        return eventRepository.findByShipmentIdOrderByOccurredAtDesc(shipmentId)
+        return eventRepository.findByShipmentIdOrderByOccurredAtAsc(shipmentId)
                 .stream()
                 .map(EventResponse::from)
                 .toList();
@@ -57,6 +58,12 @@ public class EventService {
 
         Shipment shipment = shipmentRepository.findById(shipmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+
+        // Regra: GATE_IN só pode ocorrer uma vez por shipment
+        if (request.type() == EventType.GATE_IN
+                && eventRepository.existsByShipmentIdAndType(shipmentId, EventType.GATE_IN)) {
+            throw new BusinessException("GATE_IN event already exists for shipment " + shipmentId);
+        }
 
         // Validacao: evento nao pode ser anterior ao ultimo evento registrado
         Event lastEvent = shipment.lastEvent();

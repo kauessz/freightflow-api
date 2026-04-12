@@ -1,0 +1,49 @@
+# ============================================================
+# Test profile — carregado por @ActiveProfiles("test")
+# Datasource URL é sobrescrita pelo @DynamicPropertySource
+# do AbstractIntegrationTest (Testcontainers)
+# ============================================================
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/freightflow_test   # placeholder — TC overrides this
+    username: freight
+    password: freight123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Flyway gerencia o schema
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  flyway:
+    enabled: true
+    clean-disabled: false         # permite flyway:clean nos testes
+    locations: classpath:db/migration
+
+  # ── Desabilita Redis e RabbitMQ em testes (sem infra externa) ──
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+
+freightflow:
+  jwt:
+    secret: test-secret-key-minimum-32-bytes-for-hs256-algorithm
+    expiration-ms: 3600000        # 1h para testes
+    refresh-expiration-ms: 86400000
+
+logging:
+  level:
+    root: WARN
+    com.freightflow: INFO
+    org.testcontainers: WARN
+    org.flywaydb: INFO
+    org.springframework.security: WARN

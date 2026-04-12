@@ -120,9 +120,10 @@ class ShipmentControllerTest {
     class GetByIdEndpoint {
 
         @Test
-        @DisplayName("Deve retornar 200 com shipment encontrado")
+        @DisplayName("Deve retornar 200 com shipment encontrado (tenant correto)")
         void deveRetornar200() throws Exception {
-            when(shipmentService.getById(any(UUID.class))).thenReturn(sampleResponse());
+            // getById agora recebe (id, tenantId) — isolamento de tenant
+            when(shipmentService.getById(any(UUID.class), any(UUID.class))).thenReturn(sampleResponse());
 
             mockMvc.perform(get("/api/v1/shipments/{id}", TestDataFactory.defaultShipmentId())
                             .with(user(principal)))
@@ -132,10 +133,11 @@ class ShipmentControllerTest {
         }
 
         @Test
-        @DisplayName("Deve retornar 404 quando shipment nao encontrado")
+        @DisplayName("Deve retornar 404 quando shipment nao encontrado ou pertence a outro tenant")
         void deveRetornar404() throws Exception {
             UUID id = UUID.randomUUID();
-            when(shipmentService.getById(id)).thenThrow(new ResourceNotFoundException("Shipment", id));
+            when(shipmentService.getById(eq(id), any(UUID.class)))
+                    .thenThrow(new ResourceNotFoundException("Shipment", id));
 
             mockMvc.perform(get("/api/v1/shipments/{id}", id)
                             .with(user(principal)))

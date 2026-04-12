@@ -55,12 +55,18 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/tracking/**").permitAll()
                 .requestMatchers("/api/v1/billing/webhook").permitAll()
 
-                // Swagger / OpenAPI / Actuator
+                // Swagger / OpenAPI
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api-docs/**", "/api-docs").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
 
-                // Health check
+                // Actuator: apenas /health e /info são públicos.
+                // /metrics, /env, /beans, /heapdump etc. requerem autenticação
+                // para evitar information disclosure em produção.
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers("/actuator/info").permitAll()
+                .requestMatchers("/actuator/**").authenticated()
+
+                // Health check legado
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
 
                 // Tudo mais requer autenticacao

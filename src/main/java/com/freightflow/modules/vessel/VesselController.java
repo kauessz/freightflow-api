@@ -3,7 +3,10 @@ package com.freightflow.modules.vessel;
 import com.freightflow.modules.vessel.dto.CreateVesselRequest;
 import com.freightflow.modules.vessel.dto.UpdateVesselRequest;
 import com.freightflow.modules.vessel.dto.VesselResponse;
+import com.freightflow.modules.vessel.dto.VesselWithVoyageResponse;
 import com.freightflow.shared.pagination.PageResponse;
+import com.freightflow.shared.rbac.RequiresRole;
+import com.freightflow.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,8 +16,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -48,6 +53,18 @@ public class VesselController {
     @Operation(summary = "Get vessel by IMO number")
     public ResponseEntity<VesselResponse> getByImo(@PathVariable String imo) {
         return ResponseEntity.ok(vesselService.getByImo(imo));
+    }
+
+    @GetMapping("/active-with-shipments")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
+    @Operation(summary = "List active vessels with tenant shipments",
+               description = "Returns IN_TRANSIT and DEPARTED voyages that contain at least one shipment " +
+                             "from the authenticated tenant, enriched with AIS position and shipment count. " +
+                             "Used by the Fleet Map 'My shipments' toggle.")
+    public ResponseEntity<List<VesselWithVoyageResponse>> getActiveWithShipments(
+            @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(vesselService.getActiveWithShipments(user.getTenantId(), customerId));
     }
 
     @PostMapping

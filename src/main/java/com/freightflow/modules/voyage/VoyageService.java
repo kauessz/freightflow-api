@@ -1,12 +1,19 @@
 package com.freightflow.modules.voyage;
 
+import com.freightflow.modules.ais.VesselPositionResolver;
+import com.freightflow.modules.ais.dto.AisPositionResponse;
+import com.freightflow.modules.ais.dto.VoyageTrackingResponse;
 import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
+import com.freightflow.modules.shipment.Shipment;
+import com.freightflow.modules.shipment.dto.ShipmentSummaryResponse;
+import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.vessel.Vessel;
 import com.freightflow.modules.vessel.VesselRepository;
 import com.freightflow.modules.voyage.dto.CreateVoyageRequest;
 import com.freightflow.modules.voyage.dto.UpdateVoyageRequest;
 import com.freightflow.modules.voyage.dto.VoyageResponse;
+import com.freightflow.modules.voyage.enums.VoyageStatus;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
 import com.freightflow.shared.pagination.PageResponse;
@@ -16,6 +23,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -24,16 +36,35 @@ public class VoyageService {
 
     private static final Logger log = LoggerFactory.getLogger(VoyageService.class);
 
-    private final VoyageRepository voyageRepository;
-    private final VesselRepository vesselRepository;
-    private final PortRepository portRepository;
+    /**
+     * Valid forward-only status transitions for a voyage.
+     * CANCELLED is reachable from any non-completed state.
+     */
+    private static final Map<VoyageStatus, Set<VoyageStatus>> ALLOWED_TRANSITIONS = Map.of(
+        VoyageStatus.SCHEDULED,  EnumSet.of(VoyageStatus.DEPARTED, VoyageStatus.CANCELLED),
+        VoyageStatus.DEPARTED,   EnumSet.of(VoyageStatus.IN_TRANSIT, VoyageStatus.CANCELLED),
+        VoyageStatus.IN_TRANSIT, EnumSet.of(VoyageStatus.ARRIVED, VoyageStatus.CANCELLED),
+        VoyageStatus.ARRIVED,    EnumSet.of(VoyageStatus.COMPLETED, VoyageStatus.CANCELLED),
+        VoyageStatus.COMPLETED,  EnumSet.noneOf(VoyageStatus.class),
+        VoyageStatus.CANCELLED,  EnumSet.noneOf(VoyageStatus.class)
+    );
+
+    private final VoyageRepository    voyageRepository;
+    private final VesselRepository    vesselRepository;
+    private final PortRepository      portRepository;
+    private final ShipmentRepository  shipmentRepository;
+    private final VesselPositionResolver vesselPositionResolver;
 
     public VoyageService(VoyageRepository voyageRepository,
                          VesselRepository vesselRepository,
-                         PortRepository portRepository) {
-        this.voyageRepository = voyageRepository;
-        this.vesselRepository = vesselRepository;
-        this.portRepository = portRepository;
+                         PortRepository portRepository,
+                         ShipmentRepository shipmentRepository,
+                         VesselPositionResolver vesselPositionResolver) {
+        this.voyageRepository   = voyageRepository;
+        this.vesselRepository   = vesselRepository;
+        this.portRepository     = portRepository;
+        this.shipmentRepository = shipmentRepository;
+        this.vesselPositionResolver = vesselPositionResolver;
     }
 
     // ==================== Queries ====================
@@ -58,6 +89,14 @@ public class VoyageService {
         return VoyageResponse.from(voyage);
     }
 
+    public VoyageTrackingResponse getTracking(UUID id) {
+        log.debug("Fetching tracking for voyage id={}", id);
+        Voyage voyage = voyageRepository.findByIdWithDetails(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Voyage", id));
+        AisPositionResponse position = vesselPositionResolver.resolveForVoyage(voyage, true);
+        return VoyageTrackingResponse.from(voyage, position);
+    }
+
     // ==================== Commands ====================
 
     @Transactional
@@ -66,6 +105,10 @@ public class VoyageService {
 
         if (voyageRepository.existsByVoyageNumber(request.voyageNumber())) {
             throw new BusinessException("Voyage number " + request.voyageNumber() + " already exists");
+        }
+
+        if (request.etd().isBefore(Instant.now())) {
+            throw new BusinessException("ETD cannot be in the past");
         }
 
         if (request.eta().isBefore(request.etd())) {
@@ -102,7 +145,15 @@ public class VoyageService {
                 .orElseThrow(() -> new ResourceNotFoundException("Voyage", id));
 
         if (request.status() != null) {
-            voyage.setStatus(request.status());
+            VoyageStatus current = voyage.getStatus();
+            VoyageStatus next = request.status();
+            Set<VoyageStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(current, EnumSet.noneOf(VoyageStatus.class));
+            if (!allowed.contains(next)) {
+                throw new BusinessException(
+                        "Invalid status transition: " + current + " → " + next +
+                        ". Allowed from " + current + ": " + allowed);
+            }
+            voyage.setStatus(next);
         }
         if (request.etd() != null) {
             voyage.setEtd(request.etd());
@@ -119,6 +170,22 @@ public class VoyageService {
 
         Voyage saved = voyageRepository.save(voyage);
         return VoyageResponse.from(saved);
+    }
+
+    public List<ShipmentSummaryResponse> getShipmentsByVoyage(UUID voyageId, UUID tenantId, UUID customerId) {
+        log.debug("Listing shipments for voyageId={} tenantId={}", voyageId, tenantId);
+
+        // Verify voyage exists
+        voyageRepository.findById(voyageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Voyage", voyageId));
+
+        List<Shipment> shipments = (customerId != null)
+                ? shipmentRepository.findByVoyageIdAndTenantIdAndCustomerId(voyageId, tenantId, customerId)
+                : shipmentRepository.findByVoyageIdAndTenantId(voyageId, tenantId);
+
+        return shipments.stream()
+                .map(ShipmentSummaryResponse::from)
+                .toList();
     }
 
     @Transactional

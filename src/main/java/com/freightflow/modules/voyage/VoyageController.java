@@ -1,9 +1,12 @@
 package com.freightflow.modules.voyage;
 
+import com.freightflow.modules.shipment.dto.ShipmentSummaryResponse;
 import com.freightflow.modules.voyage.dto.CreateVoyageRequest;
 import com.freightflow.modules.voyage.dto.UpdateVoyageRequest;
 import com.freightflow.modules.voyage.dto.VoyageResponse;
 import com.freightflow.shared.pagination.PageResponse;
+import com.freightflow.shared.rbac.RequiresRole;
+import com.freightflow.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,8 +16,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -63,6 +68,18 @@ public class VoyageController {
             @PathVariable UUID id,
             @Valid @RequestBody UpdateVoyageRequest request) {
         return ResponseEntity.ok(voyageService.update(id, request));
+    }
+
+    @GetMapping("/{id}/shipments")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
+    @Operation(summary = "List shipments for a voyage",
+               description = "Returns the tenant's shipments on a given voyage. CLIENT role is further filtered by customerId.")
+    public ResponseEntity<List<ShipmentSummaryResponse>> getShipments(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        List<ShipmentSummaryResponse> shipments = voyageService.getShipmentsByVoyage(id, user.getTenantId(), customerId);
+        return ResponseEntity.ok(shipments);
     }
 
     @DeleteMapping("/{id}")

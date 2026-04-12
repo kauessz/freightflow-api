@@ -56,7 +56,7 @@ public class AisClient {
         if (cached != null && !cached.isExpired()) {
             log.debug("AIS cache hit for IMO {} (expires in {}s)",
                     imo, Duration.between(Instant.now(), cached.expiresAt()).toSeconds());
-            return cached.position();
+            return cached.position().asCached();
         }
 
         // Cache miss or expired — fetch from API
@@ -134,7 +134,7 @@ public class AisClient {
                 timestamp = Instant.now();
             }
 
-            return new AisPositionResponse(imo, lat, lon, speed, course, status, timestamp, false);
+            return AisPositionResponse.live(imo, lat, lon, speed, course, status, timestamp);
         } catch (Exception e) {
             log.warn("Failed to parse AIS response for IMO {}: {}", imo, e.getMessage());
             return null;

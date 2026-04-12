@@ -1,6 +1,7 @@
 package com.freightflow.modules.port;
 
 import com.freightflow.modules.port.dto.PortResponse;
+import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
 import com.freightflow.shared.pagination.PageResponse;
 import org.slf4j.Logger;
@@ -45,9 +46,18 @@ public class PortService {
         return PortResponse.from(port);
     }
 
+    /** UNLOCODE format: 2 uppercase country letters + 3 uppercase location chars (letters or digits). */
+    private static final java.util.regex.Pattern UNLOCODE_PATTERN =
+            java.util.regex.Pattern.compile("^[A-Z]{2}[A-Z0-9]{3}$");
+
     public PortResponse getByUnlocode(String unlocode) {
         log.debug("Fetching port unlocode={}", unlocode);
-        Port port = portRepository.findByUnlocode(unlocode.toUpperCase())
+        String upper = unlocode.toUpperCase();
+        if (!UNLOCODE_PATTERN.matcher(upper).matches()) {
+            throw new BusinessException(
+                    "Invalid UNLOCODE format: '" + unlocode + "'. Expected 2 country letters + 3 location chars (e.g., BRSSZ).");
+        }
+        Port port = portRepository.findByUnlocode(upper)
                 .orElseThrow(() -> new ResourceNotFoundException("Port", unlocode));
         return PortResponse.from(port);
     }

@@ -57,9 +57,12 @@ public class ShipmentController {
 
     @GetMapping("/{id}")
     @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
-    @Operation(summary = "Get shipment by ID")
-    public ResponseEntity<ShipmentResponse> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(shipmentService.getById(id));
+    @Operation(summary = "Get shipment by ID",
+               description = "Returns shipment only if it belongs to the caller's tenant (prevents IDOR).")
+    public ResponseEntity<ShipmentResponse> getById(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserPrincipal user) {
+        return ResponseEntity.ok(shipmentService.getById(id, user.getTenantId()));
     }
 
     @PostMapping
