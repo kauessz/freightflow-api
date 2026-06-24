@@ -32,32 +32,35 @@ public class EventService {
 
     // ==================== Queries ====================
 
-    public List<EventResponse> listByShipment(UUID shipmentId) {
+    public List<EventResponse> listByShipment(UUID shipmentId, UUID tenantId, UUID customerId) {
         log.debug("Listing events for shipment={}", shipmentId);
-        if (!shipmentRepository.existsById(shipmentId)) {
-            throw new ResourceNotFoundException("Shipment", shipmentId);
-        }
-        return eventRepository.findByShipmentIdOrderByOccurredAtAsc(shipmentId)
+        Shipment shipment = getScopedShipment(shipmentId, tenantId, customerId);
+
+        List<Event> events = customerId != null
+                ? eventRepository.findByShipmentIdAndShipmentTenantIdAndShipmentCustomerIdOrderByOccurredAtAsc(
+                        shipment.getId(), tenantId, customerId)
+                : eventRepository.findByShipmentIdAndShipmentTenantIdOrderByOccurredAtAsc(
+                        shipment.getId(), tenantId);
+
+        return events
                 .stream()
                 .map(EventResponse::from)
                 .toList();
     }
 
-    public EventResponse getById(UUID id) {
-        log.debug("Fetching event id={}", id);
-        Event event = eventRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Event", id));
+    public EventResponse getById(UUID shipmentId, UUID eventId, UUID tenantId, UUID customerId) {
+        log.debug("Fetching event id={} for shipment={}", eventId, shipmentId);
+        Event event = getScopedEvent(shipmentId, eventId, tenantId, customerId);
         return EventResponse.from(event);
     }
 
     // ==================== Commands ====================
 
     @Transactional
-    public EventResponse create(UUID shipmentId, CreateEventRequest request) {
+    public EventResponse create(UUID shipmentId, CreateEventRequest request, UUID tenantId, UUID customerId) {
         log.info("Creating event type={} for shipment={}", request.type(), shipmentId);
 
-        Shipment shipment = shipmentRepository.findById(shipmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+        Shipment shipment = getScopedShipment(shipmentId, tenantId, customerId);
 
         // Regra: GATE_IN só pode ocorrer uma vez por shipment
         if (request.type() == EventType.GATE_IN
@@ -87,11 +90,28 @@ public class EventService {
     }
 
     @Transactional
-    public void delete(UUID id) {
-        log.info("Deleting event id={}", id);
-        if (!eventRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Event", id);
+    public void delete(UUID shipmentId, UUID eventId, UUID tenantId, UUID customerId) {
+        log.info("Deleting event id={} for shipment={}", eventId, shipmentId);
+        Event event = getScopedEvent(shipmentId, eventId, tenantId, customerId);
+        eventRepository.delete(event);
+    }
+
+    private Shipment getScopedShipment(UUID shipmentId, UUID tenantId, UUID customerId) {
+        if (customerId != null) {
+            return shipmentRepository.findByIdAndTenantIdAndCustomerId(shipmentId, tenantId, customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
         }
-        eventRepository.deleteById(id);
+        return shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+    }
+
+    private Event getScopedEvent(UUID shipmentId, UUID eventId, UUID tenantId, UUID customerId) {
+        if (customerId != null) {
+            return eventRepository.findByIdAndShipmentIdAndShipmentTenantIdAndShipmentCustomerId(
+                            eventId, shipmentId, tenantId, customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
+        }
+        return eventRepository.findByIdAndShipmentIdAndShipmentTenantId(eventId, shipmentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
     }
 }

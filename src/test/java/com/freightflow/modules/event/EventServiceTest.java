@@ -27,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,10 +42,12 @@ class EventServiceTest {
     private EventService eventService;
 
     private Shipment shipment;
+    private UUID tenantId;
 
     @BeforeEach
     void setUp() {
         shipment = TestDataFactory.shipment();
+        tenantId = shipment.getTenant().getId();
     }
 
     // ── create() ─────────────────────────────────────────────────────────
@@ -61,11 +64,11 @@ class EventServiceTest {
             CreateEventRequest request = new CreateEventRequest(
                     EventType.LOADED, "Santos, BR", "Container loaded onto vessel", Instant.now());
 
-            when(shipmentRepository.findById(shipmentId)).thenReturn(Optional.of(shipment));
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.of(shipment));
             when(shipmentRepository.save(any(Shipment.class))).thenReturn(shipment);
 
             // Act
-            EventResponse result = eventService.create(shipmentId, request);
+            EventResponse result = eventService.create(shipmentId, request, tenantId, null);
 
             // Assert
             assertThat(result).isNotNull();
@@ -82,12 +85,12 @@ class EventServiceTest {
             CreateEventRequest request = new CreateEventRequest(
                     EventType.GATE_IN, "Santos, BR", null, Instant.now());
 
-            when(shipmentRepository.findById(shipmentId)).thenReturn(Optional.of(shipment));
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.of(shipment));
             when(eventRepository.existsByShipmentIdAndType(shipmentId, EventType.GATE_IN)).thenReturn(false);
             when(shipmentRepository.save(any(Shipment.class))).thenReturn(shipment);
 
             // Act
-            eventService.create(shipmentId, request);
+            eventService.create(shipmentId, request, tenantId, null);
 
             // Assert — shipment.addEvent() mutates status in-memory via domain logic
             assertThat(shipment.getStatus()).isEqualTo(ShipmentStatus.GATE_IN);
@@ -101,11 +104,11 @@ class EventServiceTest {
             CreateEventRequest request = new CreateEventRequest(
                     EventType.GATE_IN, "Santos, BR", null, Instant.now());
 
-            when(shipmentRepository.findById(shipmentId)).thenReturn(Optional.of(shipment));
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.of(shipment));
             when(eventRepository.existsByShipmentIdAndType(shipmentId, EventType.GATE_IN)).thenReturn(true);
 
             // Act & Assert
-            assertThatThrownBy(() -> eventService.create(shipmentId, request))
+            assertThatThrownBy(() -> eventService.create(shipmentId, request, tenantId, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("GATE_IN event already exists");
         }
@@ -124,12 +127,46 @@ class EventServiceTest {
                     EventType.GATE_OUT, "Rotterdam, NL", null, tooEarly);
 
             UUID shipmentId = shipment.getId();
-            when(shipmentRepository.findById(shipmentId)).thenReturn(Optional.of(shipment));
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.of(shipment));
 
             // Act & Assert
-            assertThatThrownBy(() -> eventService.create(shipmentId, request))
+            assertThatThrownBy(() -> eventService.create(shipmentId, request, tenantId, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("cannot be before last event");
+        }
+
+        @Test
+        @DisplayName("should_notCreateEvent_when_shipmentBelongsToAnotherTenant")
+        void should_notCreateEvent_when_shipmentBelongsToAnotherTenant() {
+            UUID shipmentId = shipment.getId();
+            CreateEventRequest request = new CreateEventRequest(
+                    EventType.LOADED, "Santos, BR", "Container loaded onto vessel", Instant.now());
+
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.create(shipmentId, request, tenantId, null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+
+            verify(shipmentRepository, never()).save(any(Shipment.class));
+        }
+
+        @Test
+        @DisplayName("should_notCreateEvent_when_clientTargetsAnotherCustomer")
+        void should_notCreateEvent_when_clientTargetsAnotherCustomer() {
+            UUID shipmentId = shipment.getId();
+            UUID customerId = UUID.randomUUID();
+            CreateEventRequest request = new CreateEventRequest(
+                    EventType.LOADED, "Santos, BR", "Container loaded onto vessel", Instant.now());
+
+            when(shipmentRepository.findByIdAndTenantIdAndCustomerId(shipmentId, tenantId, customerId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.create(shipmentId, request, tenantId, customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+
+            verify(shipmentRepository, never()).save(any(Shipment.class));
         }
     }
 
@@ -152,12 +189,12 @@ class EventServiceTest {
             Event ev2 = new Event(shipment, EventType.LOADED,   "Santos, BR",  t2);
             Event ev3 = new Event(shipment, EventType.DEPARTED, "Santos, BR",  t3);
 
-            when(shipmentRepository.existsById(shipmentId)).thenReturn(true);
-            when(eventRepository.findByShipmentIdOrderByOccurredAtAsc(shipmentId))
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.of(shipment));
+            when(eventRepository.findByShipmentIdAndShipmentTenantIdOrderByOccurredAtAsc(shipmentId, tenantId))
                     .thenReturn(List.of(ev1, ev2, ev3));
 
             // Act
-            List<EventResponse> result = eventService.listByShipment(shipmentId);
+            List<EventResponse> result = eventService.listByShipment(shipmentId, tenantId, null);
 
             // Assert — chronological order enforced by the ASC query
             assertThat(result).hasSize(3);
@@ -171,12 +208,129 @@ class EventServiceTest {
         void should_throwResourceNotFoundException_when_shipmentNotFound() {
             // Arrange
             UUID nonExistentId = UUID.randomUUID();
-            when(shipmentRepository.existsById(nonExistentId)).thenReturn(false);
+            when(shipmentRepository.findByIdAndTenantId(nonExistentId, tenantId)).thenReturn(Optional.empty());
 
             // Act & Assert
-            assertThatThrownBy(() -> eventService.listByShipment(nonExistentId))
+            assertThatThrownBy(() -> eventService.listByShipment(nonExistentId, tenantId, null))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Shipment");
+        }
+
+        @Test
+        @DisplayName("should_notListEvents_when_shipmentBelongsToAnotherTenant")
+        void should_notListEvents_when_shipmentBelongsToAnotherTenant() {
+            UUID shipmentId = shipment.getId();
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.listByShipment(shipmentId, tenantId, null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+        }
+
+        @Test
+        @DisplayName("should_notListEvents_when_clientTargetsAnotherCustomer")
+        void should_notListEvents_when_clientTargetsAnotherCustomer() {
+            UUID shipmentId = shipment.getId();
+            UUID customerId = UUID.randomUUID();
+            when(shipmentRepository.findByIdAndTenantIdAndCustomerId(shipmentId, tenantId, customerId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.listByShipment(shipmentId, tenantId, customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+        }
+    }
+
+    @Nested
+    @DisplayName("getById()")
+    class GetByIdTests {
+
+        @Test
+        @DisplayName("should_returnEvent_when_authorized")
+        void should_returnEvent_when_authorized() {
+            UUID eventId = UUID.randomUUID();
+            Event event = new Event(shipment, EventType.LOADED, "Santos, BR", Instant.now());
+
+            when(eventRepository.findByIdAndShipmentIdAndShipmentTenantId(eventId, shipment.getId(), tenantId))
+                    .thenReturn(Optional.of(event));
+
+            EventResponse result = eventService.getById(shipment.getId(), eventId, tenantId, null);
+
+            assertThat(result.shipmentId()).isEqualTo(shipment.getId());
+            assertThat(result.type()).isEqualTo(EventType.LOADED);
+        }
+
+        @Test
+        @DisplayName("should_notReturnEvent_when_itBelongsToAnotherTenant")
+        void should_notReturnEvent_when_itBelongsToAnotherTenant() {
+            UUID eventId = UUID.randomUUID();
+            when(eventRepository.findByIdAndShipmentIdAndShipmentTenantId(eventId, shipment.getId(), tenantId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.getById(shipment.getId(), eventId, tenantId, null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Event");
+        }
+
+        @Test
+        @DisplayName("should_notReturnEvent_when_clientTargetsAnotherCustomer")
+        void should_notReturnEvent_when_clientTargetsAnotherCustomer() {
+            UUID eventId = UUID.randomUUID();
+            UUID customerId = UUID.randomUUID();
+            when(eventRepository.findByIdAndShipmentIdAndShipmentTenantIdAndShipmentCustomerId(
+                    eventId, shipment.getId(), tenantId, customerId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.getById(shipment.getId(), eventId, tenantId, customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Event");
+        }
+    }
+
+    @Nested
+    @DisplayName("delete()")
+    class DeleteTests {
+
+        @Test
+        @DisplayName("should_deleteEvent_when_authorized")
+        void should_deleteEvent_when_authorized() {
+            UUID eventId = UUID.randomUUID();
+            Event event = new Event(shipment, EventType.LOADED, "Santos, BR", Instant.now());
+
+            when(eventRepository.findByIdAndShipmentIdAndShipmentTenantId(eventId, shipment.getId(), tenantId))
+                    .thenReturn(Optional.of(event));
+
+            eventService.delete(shipment.getId(), eventId, tenantId, null);
+
+            verify(eventRepository).delete(event);
+        }
+
+        @Test
+        @DisplayName("should_notDeleteEvent_when_eventBelongsToAnotherTenant")
+        void should_notDeleteEvent_when_eventBelongsToAnotherTenant() {
+            UUID eventId = UUID.randomUUID();
+            when(eventRepository.findByIdAndShipmentIdAndShipmentTenantId(eventId, shipment.getId(), tenantId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.delete(shipment.getId(), eventId, tenantId, null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Event");
+
+            verify(eventRepository, never()).delete(any(Event.class));
+        }
+
+        @Test
+        @DisplayName("should_notDeleteEvent_when_clientTargetsAnotherCustomer")
+        void should_notDeleteEvent_when_clientTargetsAnotherCustomer() {
+            UUID eventId = UUID.randomUUID();
+            UUID customerId = UUID.randomUUID();
+            when(eventRepository.findByIdAndShipmentIdAndShipmentTenantIdAndShipmentCustomerId(
+                    eventId, shipment.getId(), tenantId, customerId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> eventService.delete(shipment.getId(), eventId, tenantId, customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Event");
+
+            verify(eventRepository, never()).delete(any(Event.class));
         }
     }
 }

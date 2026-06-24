@@ -8,6 +8,7 @@ import com.freightflow.modules.event.dto.EventResponse;
 import com.freightflow.modules.event.enums.EventType;
 import com.freightflow.shared.exception.GlobalExceptionHandler;
 import com.freightflow.shared.exception.ResourceNotFoundException;
+import com.freightflow.shared.rbac.RoleCheckAspect;
 import com.freightflow.shared.security.UserPrincipal;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,6 +17,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -35,17 +39,42 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = EventController.class)
-@Import({TestSecurityConfig.class, GlobalExceptionHandler.class})
+@Import({TestSecurityConfig.class, GlobalExceptionHandler.class, EventControllerTest.RoleAspectTestConfig.class})
 @AutoConfigureMockMvc(addFilters = true)
 @DisplayName("EventController")
 class EventControllerTest {
+
+    @TestConfiguration
+    @EnableAspectJAutoProxy(proxyTargetClass = true)
+    static class RoleAspectTestConfig {
+        @Bean
+        RoleCheckAspect roleCheckAspect() {
+            return new RoleCheckAspect();
+        }
+    }
 
     @Autowired private MockMvc      mockMvc;
     @Autowired private ObjectMapper objectMapper;
 
     @MockBean  private EventService eventService;
 
-    private final UserPrincipal  principal  = TestDataFactory.principal();
+    private final UserPrincipal  adminPrincipal  = TestDataFactory.principal();
+    private final UserPrincipal  viewerPrincipal = new UserPrincipal(
+            UUID.fromString("bbbb0000-0000-0000-0000-000000000002"),
+            "viewer@mercosul.com",
+            null,
+            TestDataFactory.defaultTenantId(),
+            "VIEWER",
+            null
+    );
+    private final UserPrincipal  clientPrincipal = new UserPrincipal(
+            UUID.fromString("bbbb0000-0000-0000-0000-000000000003"),
+            "client@mercosul.com",
+            null,
+            TestDataFactory.defaultTenantId(),
+            "CLIENT",
+            UUID.fromString("99990000-0000-0000-0000-000000000001")
+    );
     private final UUID           shipmentId = TestDataFactory.defaultShipmentId();
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -73,11 +102,11 @@ class EventControllerTest {
         @DisplayName("Deve retornar 200 com lista de eventos do shipment")
         void deveRetornar200ComLista() throws Exception {
             UUID eventId = UUID.randomUUID();
-            when(eventService.listByShipment(shipmentId))
+            when(eventService.listByShipment(shipmentId, TestDataFactory.defaultTenantId(), null))
                     .thenReturn(List.of(sampleEvent(eventId)));
 
             mockMvc.perform(get("/api/v1/shipments/{shipmentId}/events", shipmentId)
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$[0].type").value("GATE_IN"))
@@ -89,13 +118,25 @@ class EventControllerTest {
         @DisplayName("Deve retornar 404 quando shipment inexistente")
         void deveRetornar404ShipmentInexistente() throws Exception {
             UUID unknownId = UUID.randomUUID();
-            when(eventService.listByShipment(unknownId))
+            when(eventService.listByShipment(unknownId, TestDataFactory.defaultTenantId(), null))
                     .thenThrow(new ResourceNotFoundException("Shipment", unknownId));
 
             mockMvc.perform(get("/api/v1/shipments/{shipmentId}/events", unknownId)
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.title").value("Resource Not Found"));
+        }
+
+        @Test
+        @DisplayName("CLIENT repassa customerId ao listar eventos")
+        void clientRepassaCustomerIdAoListarEventos() throws Exception {
+            UUID eventId = UUID.randomUUID();
+            when(eventService.listByShipment(shipmentId, TestDataFactory.defaultTenantId(), clientPrincipal.getCustomerId()))
+                    .thenReturn(List.of(sampleEvent(eventId)));
+
+            mockMvc.perform(get("/api/v1/shipments/{shipmentId}/events", shipmentId)
+                            .with(user(clientPrincipal)))
+                    .andExpect(status().isOk());
         }
 
         @Test
@@ -116,11 +157,12 @@ class EventControllerTest {
         @DisplayName("Deve retornar 200 com evento encontrado")
         void deveRetornar200() throws Exception {
             UUID eventId = UUID.randomUUID();
-            when(eventService.getById(eventId)).thenReturn(sampleEvent(eventId));
+            when(eventService.getById(shipmentId, eventId, TestDataFactory.defaultTenantId(), null))
+                    .thenReturn(sampleEvent(eventId));
 
             mockMvc.perform(get("/api/v1/shipments/{shipmentId}/events/{eventId}",
                                     shipmentId, eventId)
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(eventId.toString()))
                     .andExpect(jsonPath("$.type").value("GATE_IN"))
@@ -131,12 +173,12 @@ class EventControllerTest {
         @DisplayName("Deve retornar 404 quando evento nao existe")
         void deveRetornar404EventoInexistente() throws Exception {
             UUID unknownEventId = UUID.randomUUID();
-            when(eventService.getById(unknownEventId))
+            when(eventService.getById(shipmentId, unknownEventId, TestDataFactory.defaultTenantId(), null))
                     .thenThrow(new ResourceNotFoundException("Event", unknownEventId));
 
             mockMvc.perform(get("/api/v1/shipments/{shipmentId}/events/{eventId}",
                                     shipmentId, unknownEventId)
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isNotFound());
         }
     }
@@ -158,12 +200,12 @@ class EventControllerTest {
                     Instant.now()
             );
 
-            when(eventService.create(eq(shipmentId), any(CreateEventRequest.class)))
+            when(eventService.create(eq(shipmentId), any(CreateEventRequest.class), eq(TestDataFactory.defaultTenantId()), eq(null)))
                     .thenReturn(sampleEvent(eventId));
 
             mockMvc.perform(post("/api/v1/shipments/{shipmentId}/events", shipmentId)
                             .with(csrf())
-                            .with(user(principal))
+                            .with(user(adminPrincipal))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -179,7 +221,7 @@ class EventControllerTest {
 
             mockMvc.perform(post("/api/v1/shipments/{shipmentId}/events", shipmentId)
                             .with(csrf())
-                            .with(user(principal))
+                            .with(user(adminPrincipal))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(invalidJson))
                     .andExpect(status().isBadRequest());
@@ -196,15 +238,51 @@ class EventControllerTest {
                     Instant.now()
             );
 
-            when(eventService.create(eq(unknownId), any(CreateEventRequest.class)))
+            when(eventService.create(eq(unknownId), any(CreateEventRequest.class), eq(TestDataFactory.defaultTenantId()), eq(null)))
                     .thenThrow(new ResourceNotFoundException("Shipment", unknownId));
 
             mockMvc.perform(post("/api/v1/shipments/{shipmentId}/events", unknownId)
                             .with(csrf())
-                            .with(user(principal))
+                            .with(user(adminPrincipal))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("VIEWER nao pode criar evento")
+        void viewerNaoPodeCriarEvento() throws Exception {
+            CreateEventRequest request = new CreateEventRequest(
+                    EventType.GATE_IN,
+                    "Santos, Brazil",
+                    "Container received at gate",
+                    Instant.now()
+            );
+
+            mockMvc.perform(post("/api/v1/shipments/{shipmentId}/events", shipmentId)
+                            .with(csrf())
+                            .with(user(viewerPrincipal))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("CLIENT nao pode criar evento")
+        void clientNaoPodeCriarEvento() throws Exception {
+            CreateEventRequest request = new CreateEventRequest(
+                    EventType.GATE_IN,
+                    "Santos, Brazil",
+                    "Container received at gate",
+                    Instant.now()
+            );
+
+            mockMvc.perform(post("/api/v1/shipments/{shipmentId}/events", shipmentId)
+                            .with(csrf())
+                            .with(user(clientPrincipal))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isForbidden());
         }
     }
 
@@ -218,12 +296,12 @@ class EventControllerTest {
         @DisplayName("Deve retornar 204 ao deletar evento existente")
         void deveRetornar204() throws Exception {
             UUID eventId = UUID.randomUUID();
-            doNothing().when(eventService).delete(eventId);
+            doNothing().when(eventService).delete(shipmentId, eventId, TestDataFactory.defaultTenantId(), null);
 
             mockMvc.perform(delete("/api/v1/shipments/{shipmentId}/events/{eventId}",
                                     shipmentId, eventId)
                             .with(csrf())
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isNoContent());
         }
 
@@ -232,13 +310,37 @@ class EventControllerTest {
         void deveRetornar404EventoInexistente() throws Exception {
             UUID unknownEventId = UUID.randomUUID();
             doThrow(new ResourceNotFoundException("Event", unknownEventId))
-                    .when(eventService).delete(unknownEventId);
+                    .when(eventService).delete(shipmentId, unknownEventId, TestDataFactory.defaultTenantId(), null);
 
             mockMvc.perform(delete("/api/v1/shipments/{shipmentId}/events/{eventId}",
                                     shipmentId, unknownEventId)
                             .with(csrf())
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("VIEWER nao pode deletar evento")
+        void viewerNaoPodeDeletarEvento() throws Exception {
+            UUID eventId = UUID.randomUUID();
+
+            mockMvc.perform(delete("/api/v1/shipments/{shipmentId}/events/{eventId}",
+                                    shipmentId, eventId)
+                            .with(csrf())
+                            .with(user(viewerPrincipal)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("CLIENT nao pode deletar evento")
+        void clientNaoPodeDeletarEvento() throws Exception {
+            UUID eventId = UUID.randomUUID();
+
+            mockMvc.perform(delete("/api/v1/shipments/{shipmentId}/events/{eventId}",
+                                    shipmentId, eventId)
+                            .with(csrf())
+                            .with(user(clientPrincipal)))
+                    .andExpect(status().isForbidden());
         }
     }
 }

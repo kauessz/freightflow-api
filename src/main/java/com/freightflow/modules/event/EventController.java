@@ -2,12 +2,15 @@ package com.freightflow.modules.event;
 
 import com.freightflow.modules.event.dto.CreateEventRequest;
 import com.freightflow.modules.event.dto.EventResponse;
+import com.freightflow.shared.rbac.RequiresRole;
+import com.freightflow.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,33 +29,45 @@ public class EventController {
     }
 
     @GetMapping
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
     @Operation(summary = "List events for a shipment", description = "Returns all events ordered by occurredAt descending")
-    public ResponseEntity<List<EventResponse>> list(@PathVariable UUID shipmentId) {
-        return ResponseEntity.ok(eventService.listByShipment(shipmentId));
+    public ResponseEntity<List<EventResponse>> list(@PathVariable UUID shipmentId,
+                                                    @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(eventService.listByShipment(shipmentId, user.getTenantId(), customerId));
     }
 
     @GetMapping("/{eventId}")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
     @Operation(summary = "Get a specific event")
     public ResponseEntity<EventResponse> getById(@PathVariable UUID shipmentId,
-                                                  @PathVariable UUID eventId) {
-        return ResponseEntity.ok(eventService.getById(eventId));
+                                                 @PathVariable UUID eventId,
+                                                 @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(eventService.getById(shipmentId, eventId, user.getTenantId(), customerId));
     }
 
     @PostMapping
+    @RequiresRole({"ADMIN", "OPERATOR"})
     @Operation(summary = "Register a new event",
                description = "Creates a cargo event and automatically updates the shipment status")
     public ResponseEntity<EventResponse> create(
             @PathVariable UUID shipmentId,
-            @Valid @RequestBody CreateEventRequest request) {
-        EventResponse response = eventService.create(shipmentId, request);
+            @Valid @RequestBody CreateEventRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        EventResponse response = eventService.create(shipmentId, request, user.getTenantId(), customerId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @DeleteMapping("/{eventId}")
+    @RequiresRole("ADMIN")
     @Operation(summary = "Delete an event")
     public ResponseEntity<Void> delete(@PathVariable UUID shipmentId,
-                                        @PathVariable UUID eventId) {
-        eventService.delete(eventId);
+                                       @PathVariable UUID eventId,
+                                       @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        eventService.delete(shipmentId, eventId, user.getTenantId(), customerId);
         return ResponseEntity.noContent().build();
     }
 }
