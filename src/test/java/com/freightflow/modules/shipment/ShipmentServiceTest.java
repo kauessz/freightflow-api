@@ -3,9 +3,12 @@ package com.freightflow.modules.shipment;
 import com.freightflow.fixtures.TestDataFactory;
 import com.freightflow.modules.auth.Tenant;
 import com.freightflow.modules.auth.TenantRepository;
+import com.freightflow.modules.event.Event;
+import com.freightflow.modules.event.enums.EventType;
 import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
+import com.freightflow.modules.shipment.dto.PublicTrackingResponse;
 import com.freightflow.modules.shipment.dto.ShipmentFilterParams;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
 import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
@@ -472,6 +475,42 @@ class ShipmentServiceTest {
 
             verify(shipmentRepository).countAtRisk(eq(tenantId));
             assertThat(stats.atRisk()).isEqualTo(5L);
+        }
+    }
+
+    @Nested
+    @DisplayName("track()")
+    class TrackTests {
+
+        @Test
+        @DisplayName("Deve retornar tracking publico sanitizado")
+        void deveRetornarTrackingPublicoSanitizado() {
+            Event gateIn = new Event(shipment, EventType.GATE_IN, "Santos, BR", "Internal note", java.time.Instant.now().minusSeconds(3600));
+            Event loaded = new Event(shipment, EventType.LOADED, "Santos, BR", "Loaded internally", java.time.Instant.now().minusSeconds(1800));
+            shipment.addEvent(gateIn);
+            shipment.addEvent(loaded);
+
+            when(shipmentRepository.findByBookingWithDetails("A123456789")).thenReturn(Optional.of(shipment));
+
+            PublicTrackingResponse result = shipmentService.track("A123456789");
+
+            assertThat(result.booking()).isEqualTo("A123456789");
+            assertThat(result.containerNumber()).isEqualTo("MSCU1234567");
+            assertThat(result.statusMessage()).isNotBlank();
+            assertThat(result.lastUpdate()).isEqualTo(loaded.getOccurredAt());
+            assertThat(result.milestones()).hasSize(2);
+            assertThat(result.milestones().get(0).type()).isEqualTo(EventType.GATE_IN);
+            assertThat(result.milestones().get(0).location()).isEqualTo("Santos, BR");
+        }
+
+        @Test
+        @DisplayName("Deve lancar ResourceNotFoundException quando booking nao existe")
+        void deveLancarExcecaoQuandoBookingNaoExiste() {
+            when(shipmentRepository.findByBookingWithDetails("UNKNOWN")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> shipmentService.track("UNKNOWN"))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
         }
     }
 }

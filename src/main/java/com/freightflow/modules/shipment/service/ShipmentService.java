@@ -7,10 +7,10 @@ import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
 import com.freightflow.modules.shipment.Shipment;
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
+import com.freightflow.modules.shipment.dto.PublicTrackingResponse;
 import com.freightflow.modules.shipment.dto.ShipmentFilterParams;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
 import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
-import com.freightflow.modules.shipment.dto.TrackingResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
 import com.freightflow.modules.shipment.enums.ShipmentStatus;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
@@ -119,25 +119,29 @@ public class ShipmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment", id));
     }
 
-    public TrackingResponse track(String booking) {
+    public PublicTrackingResponse track(String booking) {
         log.info("Public tracking request for booking={}", booking);
         Shipment shipment = shipmentRepository.findByBookingWithDetails(booking)
                 .orElseThrow(() -> new ResourceNotFoundException("Shipment", booking));
 
         var events = shipment.getEvents().stream()
                 .sorted(Comparator.comparing(e -> e.getOccurredAt()))
-                .map(e -> new TrackingResponse.TrackingEvent(
+                .map(e -> new PublicTrackingResponse.PublicTrackingMilestone(
                         e.getType(),
                         e.getLocation(),
-                        e.getOccurredAt(),
-                        e.getReportedAt(),
-                        e.getDescription()))
+                        e.getOccurredAt()))
                 .collect(Collectors.toList());
 
-        return new TrackingResponse(
+        var lastUpdate = shipment.getEvents().stream()
+                .map(e -> e.getOccurredAt())
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+
+        return new PublicTrackingResponse(
                 shipment.getBooking(),
                 shipment.getContainerNumber(),
                 shipment.getStatus(),
+                buildPublicStatusMessage(shipment.getStatus()),
                 shipment.getVoyage().getVessel().getName(),
                 shipment.getVoyage().getVoyageNumber(),
                 shipment.getOriginPort().getName(),
@@ -146,16 +150,23 @@ public class ShipmentService {
                 shipment.getDestinationPort().getUnlocode(),
                 shipment.getVoyage().getEtd(),
                 shipment.getVoyage().getEta(),
-                shipment.getHouseBl(),
-                shipment.getMasterBl(),
-                shipment.getIncoterm(),
-                shipment.getCargoDescription(),
-                shipment.getDocumentStatus(),
-                shipment.getCustomsStatus(),
-                shipment.getRiskLevel(),
-                shipment.getDelayDays(),
+                lastUpdate,
                 events
         );
+    }
+
+    private String buildPublicStatusMessage(ShipmentStatus status) {
+        return switch (status) {
+            case BOOKED -> "Booking received";
+            case CONFIRMED -> "Booking confirmed";
+            case GATE_IN -> "Cargo received at terminal";
+            case LOADED -> "Cargo loaded on vessel";
+            case IN_TRANSIT -> "Shipment in transit";
+            case ARRIVED -> "Shipment arrived at destination port";
+            case GATE_OUT -> "Cargo released from terminal";
+            case DELIVERED -> "Shipment delivered";
+            case CANCELLED -> "Shipment cancelled";
+        };
     }
 
     /**

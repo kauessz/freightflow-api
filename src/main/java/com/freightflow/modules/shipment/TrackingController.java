@@ -1,6 +1,6 @@
 package com.freightflow.modules.shipment;
 
-import com.freightflow.modules.shipment.dto.TrackingResponse;
+import com.freightflow.modules.shipment.dto.PublicTrackingResponse;
 import com.freightflow.modules.shipment.service.ShipmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,7 +23,7 @@ public class TrackingController {
 
     @GetMapping("/{booking}")
     @Operation(summary = "Track shipment by booking number", description = "Public endpoint — no authentication required")
-    public ResponseEntity<TrackingResponse> track(@PathVariable String booking) {
+    public ResponseEntity<PublicTrackingResponse> track(@PathVariable String booking) {
         return ResponseEntity.ok(shipmentService.track(booking));
     }
 }
