@@ -4,6 +4,7 @@ import com.freightflow.fixtures.TestDataFactory;
 import com.freightflow.modules.ais.VesselPositionResolver;
 import com.freightflow.modules.ais.dto.AisPositionResponse;
 import com.freightflow.modules.ais.dto.PositionSource;
+import com.freightflow.modules.shipment.Shipment;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.vessel.dto.CreateVesselRequest;
 import com.freightflow.modules.vessel.dto.VesselResponse;
@@ -139,6 +140,11 @@ class VesselServiceTest {
                     .thenReturn(List.of(voyage));
             when(shipmentRepository.countByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
                     .thenReturn(List.of(countView(voyage.getId(), 2L)));
+            when(shipmentRepository.findByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
+                    .thenReturn(List.of(
+                            shipment(voyage, "A123456789", "HIGH"),
+                            shipment(voyage, "B987654321", "LOW")
+                    ));
             when(vesselPositionResolver.resolveForVoyage(voyage, true)).thenReturn(position);
             when(voyageFleetMapEligibilityService.evaluate(voyage, 2))
                     .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(true, List.of()));
@@ -147,8 +153,15 @@ class VesselServiceTest {
 
             assertThat(result).hasSize(1);
             assertThat(result.get(0).shipmentCount()).isEqualTo(2);
+            assertThat(result.get(0).vesselName()).isEqualTo(voyage.getVessel().getName());
+            assertThat(result.get(0).vesselImo()).isEqualTo(voyage.getVessel().getImo());
+            assertThat(result.get(0).vesselPosition()).isEqualTo(position);
+            assertThat(result.get(0).etd()).isEqualTo(voyage.getEtd());
             assertThat(result.get(0).positionSource()).isEqualTo(PositionSource.ESTIMATED);
             assertThat(result.get(0).positionEstimated()).isTrue();
+            assertThat(result.get(0).aggregatedRiskLevel()).isEqualTo("HIGH");
+            assertThat(result.get(0).relatedShipments()).hasSize(2);
+            assertThat(result.get(0).relatedShipments().get(0).voyageNumber()).isEqualTo(voyage.getVoyageNumber());
         }
 
         @Test
@@ -163,6 +176,8 @@ class VesselServiceTest {
                     .thenReturn(List.of(voyage));
             when(shipmentRepository.countByVoyageIdsAndTenantIdAndCustomerId(List.of(voyage.getId()), tenantId, customerId))
                     .thenReturn(List.of(countView(voyage.getId(), 1L)));
+            when(shipmentRepository.findByVoyageIdsAndTenantIdAndCustomerId(List.of(voyage.getId()), tenantId, customerId))
+                    .thenReturn(List.of(shipment(voyage, "CLIENT-BOOKING", "MEDIUM")));
             when(vesselPositionResolver.resolveForVoyage(voyage, true)).thenReturn(position);
             when(voyageFleetMapEligibilityService.evaluate(voyage, 1))
                     .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(true, List.of()));
@@ -172,6 +187,9 @@ class VesselServiceTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0).shipmentCount()).isEqualTo(1);
             assertThat(result.get(0).positionSource()).isEqualTo(PositionSource.UNAVAILABLE);
+            assertThat(result.get(0).relatedShipments()).singleElement()
+                    .extracting("booking")
+                    .isEqualTo("CLIENT-BOOKING");
             verify(voyageRepository).findActiveVoyagesWithCustomerShipments(
                     tenantId, customerId, List.of(VoyageStatus.IN_TRANSIT, VoyageStatus.DEPARTED));
         }
@@ -186,6 +204,8 @@ class VesselServiceTest {
                     .thenReturn(List.of(voyage));
             when(shipmentRepository.countByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
                     .thenReturn(List.of(countView(voyage.getId(), 1L)));
+            when(shipmentRepository.findByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
+                    .thenReturn(List.of(shipment(voyage, "A123456789", "HIGH")));
             when(vesselPositionResolver.resolveForVoyage(voyage, true))
                     .thenReturn(AisPositionResponse.live(
                             voyage.getVessel().getImo(),
@@ -299,5 +319,11 @@ class VesselServiceTest {
                 return shipmentCount;
             }
         };
+    }
+
+    private Shipment shipment(Voyage voyage, String booking, String riskLevel) {
+        Shipment shipment = TestDataFactory.shipment(UUID.randomUUID(), booking);
+        shipment.setRiskLevel(riskLevel);
+        return shipment;
     }
 }

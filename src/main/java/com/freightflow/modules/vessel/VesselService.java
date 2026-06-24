@@ -2,6 +2,8 @@ package com.freightflow.modules.vessel;
 
 import com.freightflow.modules.ais.VesselPositionResolver;
 import com.freightflow.modules.ais.dto.AisPositionResponse;
+import com.freightflow.modules.shipment.Shipment;
+import com.freightflow.modules.shipment.dto.FleetMapShipmentResponse;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.vessel.dto.CreateVesselRequest;
 import com.freightflow.modules.vessel.dto.UpdateVesselRequest;
@@ -97,14 +99,26 @@ public class VesselService {
                         view -> Math.toIntExact(view.getShipmentCount())
                 ));
 
+        Map<UUID, List<FleetMapShipmentResponse>> relatedShipments = (customerId != null
+                ? shipmentRepository.findByVoyageIdsAndTenantIdAndCustomerId(voyageIds, tenantId, customerId)
+                : shipmentRepository.findByVoyageIdsAndTenantId(voyageIds, tenantId))
+                .stream()
+                .collect(Collectors.groupingBy(
+                        shipment -> shipment.getVoyage().getId(),
+                        Collectors.mapping(FleetMapShipmentResponse::from, Collectors.toList())
+                ));
+
         return voyages.stream().map(voyage -> {
             AisPositionResponse pos = vesselPositionResolver.resolveForVoyage(voyage, true);
             int shipmentCount = shipmentCounts.getOrDefault(voyage.getId(), 0);
             var eligibility = voyageFleetMapEligibilityService.evaluate(voyage, shipmentCount);
+            List<FleetMapShipmentResponse> voyageShipments = relatedShipments.getOrDefault(voyage.getId(), List.of());
             return VesselWithVoyageResponse.from(
                     voyage,
                     pos,
                     shipmentCount,
+                    aggregateRiskLevel(voyageShipments),
+                    voyageShipments,
                     eligibility.eligibleForFleetMap(),
                     eligibility.ineligibilityReasons()
             );
@@ -175,5 +189,27 @@ public class VesselService {
         if (imo == null) return null;
         String normalized = imo.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String aggregateRiskLevel(List<FleetMapShipmentResponse> shipments) {
+        if (shipments == null || shipments.isEmpty()) {
+            return null;
+        }
+
+        return shipments.stream()
+                .map(FleetMapShipmentResponse::riskLevel)
+                .filter(level -> level != null && !level.isBlank())
+                .max(java.util.Comparator.comparingInt(this::riskRank))
+                .orElse(null);
+    }
+
+    private int riskRank(String riskLevel) {
+        return switch (riskLevel) {
+            case "CRITICAL" -> 4;
+            case "HIGH" -> 3;
+            case "MEDIUM" -> 2;
+            case "LOW" -> 1;
+            default -> 0;
+        };
     }
 }

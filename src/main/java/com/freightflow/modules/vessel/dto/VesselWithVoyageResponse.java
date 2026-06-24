@@ -2,6 +2,7 @@ package com.freightflow.modules.vessel.dto;
 
 import com.freightflow.modules.ais.dto.AisPositionResponse;
 import com.freightflow.modules.ais.dto.PositionSource;
+import com.freightflow.modules.shipment.dto.FleetMapShipmentResponse;
 import com.freightflow.modules.vessel.Vessel;
 import com.freightflow.modules.voyage.Voyage;
 import com.freightflow.modules.voyage.dto.FleetMapIneligibilityReason;
@@ -19,21 +20,33 @@ public record VesselWithVoyageResponse(
         UUID    vesselId,
         String  imo,
         String  name,
+        String  vesselName,
+        String  vesselImo,
         String  carrier,
         Double  latitude,
         Double  longitude,
         Instant lastUpdate,
         PositionSource positionSource,
         boolean positionEstimated,
+        AisPositionResponse vesselPosition,
         UUID    voyageId,
         String  voyageNumber,
         String  status,
         String  originPortName,
         String  originPortUnlocode,
+        Double  originLat,
+        Double  originLon,
         String  destPortName,
         String  destPortUnlocode,
+        String  destinationPortName,
+        String  destinationPortUnlocode,
+        Double  destinationLat,
+        Double  destinationLon,
+        Instant etd,
         Instant eta,
         int     shipmentCount,
+        String  aggregatedRiskLevel,
+        List<FleetMapShipmentResponse> relatedShipments,
         boolean eligibleForFleetMap,
         List<FleetMapIneligibilityReason> ineligibilityReasons
 ) {
@@ -58,6 +71,8 @@ public record VesselWithVoyageResponse(
             Voyage voyage,
             AisPositionResponse pos,
             int shipmentCount,
+            String aggregatedRiskLevel,
+            List<FleetMapShipmentResponse> relatedShipments,
             boolean eligibleForFleetMap,
             List<FleetMapIneligibilityReason> ineligibilityReasons
     ) {
@@ -73,21 +88,33 @@ public record VesselWithVoyageResponse(
                 v.getId(),
                 v.getImo(),
                 v.getName(),
+                v.getName(),
+                v.getImo(),
                 v.getCarrier() != null && !v.getCarrier().isBlank() ? v.getCarrier() : deriveCarrier(v.getName()),
                 lat,
                 lon,
                 lastUpdate,
                 source,
                 estimated,
+                pos,
                 voyage.getId(),
                 voyage.getVoyageNumber(),
                 voyage.getStatus().name(),
                 voyage.getOriginPort() != null ? voyage.getOriginPort().getName() : null,
                 voyage.getOriginPort() != null ? voyage.getOriginPort().getUnlocode() : null,
+                voyage.getOriginPort() != null ? voyage.getOriginPort().getLatitude() : null,
+                voyage.getOriginPort() != null ? voyage.getOriginPort().getLongitude() : null,
                 voyage.getDestinationPort() != null ? voyage.getDestinationPort().getName() : null,
                 voyage.getDestinationPort() != null ? voyage.getDestinationPort().getUnlocode() : null,
+                voyage.getDestinationPort() != null ? voyage.getDestinationPort().getName() : null,
+                voyage.getDestinationPort() != null ? voyage.getDestinationPort().getUnlocode() : null,
+                voyage.getDestinationPort() != null ? voyage.getDestinationPort().getLatitude() : null,
+                voyage.getDestinationPort() != null ? voyage.getDestinationPort().getLongitude() : null,
+                voyage.getEtd(),
                 voyage.getEta(),
                 shipmentCount,
+                aggregatedRiskLevel,
+                relatedShipments,
                 eligibleForFleetMap,
                 ineligibilityReasons
         );

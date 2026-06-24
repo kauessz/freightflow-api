@@ -113,6 +113,36 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID>, JpaSp
             @Param("tenantId")   UUID tenantId,
             @Param("customerId") UUID customerId);
 
+    @Query("""
+        SELECT s FROM Shipment s
+        JOIN FETCH s.originPort
+        JOIN FETCH s.destinationPort
+        JOIN FETCH s.voyage v
+        JOIN FETCH v.vessel
+        WHERE s.voyage.id IN :voyageIds
+          AND s.tenant.id = :tenantId
+        ORDER BY s.createdAt ASC
+    """)
+    List<Shipment> findByVoyageIdsAndTenantId(
+            @Param("voyageIds") List<UUID> voyageIds,
+            @Param("tenantId") UUID tenantId);
+
+    @Query("""
+        SELECT s FROM Shipment s
+        JOIN FETCH s.originPort
+        JOIN FETCH s.destinationPort
+        JOIN FETCH s.voyage v
+        JOIN FETCH v.vessel
+        WHERE s.voyage.id IN :voyageIds
+          AND s.tenant.id = :tenantId
+          AND s.customer.id = :customerId
+        ORDER BY s.createdAt ASC
+    """)
+    List<Shipment> findByVoyageIdsAndTenantIdAndCustomerId(
+            @Param("voyageIds") List<UUID> voyageIds,
+            @Param("tenantId") UUID tenantId,
+            @Param("customerId") UUID customerId);
+
     /** Contagem de embarques de um tenant em uma voyage. Usado no VesselService. */
     long countByVoyageIdAndTenantId(UUID voyageId, UUID tenantId);
 
