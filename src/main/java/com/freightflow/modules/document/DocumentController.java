@@ -63,10 +63,12 @@ public class DocumentController {
             @RequestParam("type") String type,
             @RequestParam(value = "description", required = false) String description,
             @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
 
         DocumentResponse response = documentService.upload(
-                user.getTenantId().toString(),
-                shipmentId.toString(),
+                user.getTenantId(),
+                shipmentId,
+                customerId,
                 user.getId() != null ? user.getId().toString() : null,
                 type,
                 description,
@@ -90,10 +92,12 @@ public class DocumentController {
     public ResponseEntity<List<DocumentResponse>> listByShipment(
             @PathVariable("id") UUID shipmentId,
             @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
 
         List<DocumentResponse> docs = documentService.listByShipment(
-                user.getTenantId().toString(),
-                shipmentId.toString()
+                user.getTenantId(),
+                shipmentId,
+                customerId
         );
         return ResponseEntity.ok(docs);
     }
@@ -113,8 +117,9 @@ public class DocumentController {
     public ResponseEntity<Void> delete(
             @PathVariable("id") UUID documentId,
             @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
 
-        documentService.delete(user.getTenantId().toString(), documentId.toString());
+        documentService.delete(user.getTenantId(), documentId, customerId);
         return ResponseEntity.noContent().build();
     }
 }

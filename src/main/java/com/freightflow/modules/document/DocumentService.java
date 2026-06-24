@@ -2,6 +2,7 @@ package com.freightflow.modules.document;
 
 import com.freightflow.modules.auth.TenantRepository;
 import com.freightflow.modules.auth.UserRepository;
+import com.freightflow.modules.shipment.Shipment;
 import com.freightflow.modules.document.dto.DocumentResponse;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.shared.exception.BusinessException;
@@ -73,7 +74,7 @@ public class DocumentService {
      * @return {@link DocumentResponse} with a 1-hour pre-signed download URL
      */
     @Transactional
-    public DocumentResponse upload(String tenantId, String shipmentId, String uploadedById,
+    public DocumentResponse upload(UUID tenantId, UUID shipmentId, UUID customerId, String uploadedById,
                                    String type, String description, MultipartFile file) {
 
         // ── Validate file ─────────────────────────────────────────────────
@@ -100,13 +101,9 @@ public class DocumentService {
         }
 
         // ── Load referenced entities ──────────────────────────────────────
-        UUID tenantUuid   = UUID.fromString(tenantId);
-        UUID shipmentUuid = UUID.fromString(shipmentId);
-
-        var tenant = tenantRepository.findById(tenantUuid)
+        var tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant", tenantId));
-        var shipment = shipmentRepository.findById(shipmentUuid)
-                .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+        var shipment = getScopedShipment(shipmentId, tenantId, customerId);
 
         // ── Upload to storage ─────────────────────────────────────────────
         byte[] bytes;
@@ -117,7 +114,7 @@ public class DocumentService {
         }
 
         String storageKey = storageService.upload(
-                tenantId, shipmentId,
+                tenantId.toString(), shipmentId.toString(),
                 file.getOriginalFilename(), contentType, bytes);
 
         log.info("Document uploaded: tenant={} shipment={} key={} type={} size={}B",
@@ -157,9 +154,16 @@ public class DocumentService {
     /**
      * Returns all active documents for a shipment, each with a fresh 1-hour presigned URL.
      */
-    public List<DocumentResponse> listByShipment(String tenantId, String shipmentId) {
-        return documentRepository
-                .findByShipmentIdAndActiveTrue(UUID.fromString(shipmentId))
+    public List<DocumentResponse> listByShipment(UUID tenantId, UUID shipmentId, UUID customerId) {
+        Shipment shipment = getScopedShipment(shipmentId, tenantId, customerId);
+
+        List<Document> documents = customerId != null
+                ? documentRepository.findByShipmentIdAndShipmentTenantIdAndShipmentCustomerIdAndActiveTrue(
+                        shipment.getId(), tenantId, customerId)
+                : documentRepository.findByShipmentIdAndShipmentTenantIdAndActiveTrue(
+                        shipment.getId(), tenantId);
+
+        return documents
                 .stream()
                 .map(doc -> {
                     String url = storageService.generatePresignedUrl(doc.getStorageKey(), PRESIGN_TTL);
@@ -177,14 +181,8 @@ public class DocumentService {
      * a 404 is returned (same behaviour as IDOR protection on shipments).</p>
      */
     @Transactional
-    public void delete(String tenantId, String documentId) {
-        Document doc = documentRepository.findById(UUID.fromString(documentId))
-                .orElseThrow(() -> new ResourceNotFoundException("Document", documentId));
-
-        // Cross-tenant guard
-        if (!doc.getTenant().getId().toString().equals(tenantId)) {
-            throw new ResourceNotFoundException("Document", documentId);
-        }
+    public void delete(UUID tenantId, UUID documentId, UUID customerId) {
+        Document doc = getScopedDocument(documentId, tenantId, customerId);
 
         // Soft delete — retain record for audit trail
         doc.setActive(false);
@@ -197,5 +195,24 @@ public class DocumentService {
         } catch (Exception e) {
             log.warn("Storage delete failed for key={}: {}", doc.getStorageKey(), e.getMessage());
         }
+    }
+
+    private Shipment getScopedShipment(UUID shipmentId, UUID tenantId, UUID customerId) {
+        if (customerId != null) {
+            return shipmentRepository.findByIdAndTenantIdAndCustomerId(shipmentId, tenantId, customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+        }
+        return shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+    }
+
+    private Document getScopedDocument(UUID documentId, UUID tenantId, UUID customerId) {
+        if (customerId != null) {
+            return documentRepository.findByIdAndShipmentTenantIdAndShipmentCustomerIdAndActiveTrue(
+                            documentId, tenantId, customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Document", documentId));
+        }
+        return documentRepository.findByIdAndShipmentTenantIdAndActiveTrue(documentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document", documentId));
     }
 }
