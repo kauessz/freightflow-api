@@ -47,8 +47,10 @@ public class AlertController {
     @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
     @Operation(summary = "List alerts by shipment", description = "Returns all alerts (resolved and open) for a specific shipment.")
     public ResponseEntity<List<AlertResponse>> listByShipment(
-            @PathVariable UUID shipmentId) {
-        return ResponseEntity.ok(alertService.findByShipment(shipmentId));
+            @PathVariable UUID shipmentId,
+            @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(alertService.findByShipment(shipmentId, user.getTenantId(), customerId));
     }
 
     /**
@@ -75,6 +77,7 @@ public class AlertController {
     public ResponseEntity<AlertResponse> resolve(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal user) {
-        return ResponseEntity.ok(alertService.resolve(id, user.getTenantId()));
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(alertService.resolve(id, user.getTenantId(), customerId));
     }
 }

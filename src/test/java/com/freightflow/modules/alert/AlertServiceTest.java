@@ -191,11 +191,11 @@ class AlertServiceTest {
             UUID alertId  = UUID.randomUUID();
             TestDataFactory.setEntityId(alert, alertId);
 
-            when(alertRepository.findById(alertId)).thenReturn(Optional.of(alert));
+            when(alertRepository.findByIdAndShipmentTenantId(alertId, tenantId)).thenReturn(Optional.of(alert));
             when(alertRepository.save(any(Alert.class))).thenAnswer(inv -> inv.getArgument(0));
 
             // Act
-            AlertResponse result = alertService.resolve(alertId, tenantId);
+            AlertResponse result = alertService.resolve(alertId, tenantId, null);
 
             // Assert
             assertThat(result.resolved()).isTrue();
@@ -212,12 +212,40 @@ class AlertServiceTest {
             TestDataFactory.setEntityId(alert, alertId);
             alert.resolve(); // pre-resolve
 
-            when(alertRepository.findById(alertId)).thenReturn(Optional.of(alert));
+            when(alertRepository.findByIdAndShipmentTenantId(alertId, tenantId)).thenReturn(Optional.of(alert));
 
             // Act & Assert
-            assertThatThrownBy(() -> alertService.resolve(alertId, tenantId))
+            assertThatThrownBy(() -> alertService.resolve(alertId, tenantId, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("already resolved");
+        }
+
+        @Test
+        @DisplayName("should_throwResourceNotFoundException_when_alertBelongsToAnotherTenant")
+        void should_throwResourceNotFoundException_when_alertBelongsToAnotherTenant() {
+            UUID tenantId = tenant.getId();
+            UUID alertId  = UUID.randomUUID();
+
+            when(alertRepository.findByIdAndShipmentTenantId(alertId, tenantId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> alertService.resolve(alertId, tenantId, null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Alert");
+        }
+
+        @Test
+        @DisplayName("should_throwResourceNotFoundException_when_clientTargetsAnotherCustomer")
+        void should_throwResourceNotFoundException_when_clientTargetsAnotherCustomer() {
+            UUID tenantId   = tenant.getId();
+            UUID customerId = UUID.randomUUID();
+            UUID alertId    = UUID.randomUUID();
+
+            when(alertRepository.findByIdAndShipmentTenantIdAndShipmentCustomerId(alertId, tenantId, customerId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> alertService.resolve(alertId, tenantId, customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Alert");
         }
     }
 
@@ -245,6 +273,55 @@ class AlertServiceTest {
             // Assert
             assertThat(result).hasSize(2);
             assertThat(result).allMatch(a -> !a.resolved());
+        }
+    }
+
+    @Nested
+    @DisplayName("findByShipment()")
+    class FindByShipmentTests {
+
+        @Test
+        @DisplayName("should_returnAlerts_when_shipmentBelongsToTenant")
+        void should_returnAlerts_when_shipmentBelongsToTenant() {
+            UUID tenantId = tenant.getId();
+            UUID shipmentId = shipment.getId();
+            Alert alert1 = TestDataFactory.alert(shipment);
+            Alert alert2 = TestDataFactory.alert(shipment);
+
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.of(shipment));
+            when(alertRepository.findByShipmentIdAndShipmentTenantId(shipmentId, tenantId))
+                    .thenReturn(List.of(alert1, alert2));
+
+            List<AlertResponse> result = alertService.findByShipment(shipmentId, tenantId, null);
+
+            assertThat(result).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("should_throwResourceNotFoundException_when_shipmentBelongsToAnotherTenant")
+        void should_throwResourceNotFoundException_when_shipmentBelongsToAnotherTenant() {
+            UUID tenantId = tenant.getId();
+            UUID shipmentId = shipment.getId();
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> alertService.findByShipment(shipmentId, tenantId, null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+        }
+
+        @Test
+        @DisplayName("should_throwResourceNotFoundException_when_clientTargetsAnotherCustomer")
+        void should_throwResourceNotFoundException_when_clientTargetsAnotherCustomer() {
+            UUID tenantId = tenant.getId();
+            UUID shipmentId = shipment.getId();
+            UUID customerId = UUID.randomUUID();
+
+            when(shipmentRepository.findByIdAndTenantIdAndCustomerId(shipmentId, tenantId, customerId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> alertService.findByShipment(shipmentId, tenantId, customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
         }
     }
 

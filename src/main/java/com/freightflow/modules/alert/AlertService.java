@@ -50,12 +50,16 @@ public class AlertService {
      * Lista todos os alerts de um embarque específico.
      * Valida existência do shipment antes de buscar.
      */
-    public List<AlertResponse> findByShipment(UUID shipmentId) {
+    public List<AlertResponse> findByShipment(UUID shipmentId, UUID tenantId, UUID customerId) {
         log.debug("Listing alerts for shipment={}", shipmentId);
-        if (!shipmentRepository.existsById(shipmentId)) {
-            throw new ResourceNotFoundException("Shipment", shipmentId);
-        }
-        return alertRepository.findByShipmentId(shipmentId)
+        Shipment shipment = getScopedShipment(shipmentId, tenantId, customerId);
+
+        List<Alert> alerts = customerId != null
+                ? alertRepository.findByShipmentIdAndShipmentTenantIdAndShipmentCustomerId(
+                        shipment.getId(), tenantId, customerId)
+                : alertRepository.findByShipmentIdAndShipmentTenantId(shipment.getId(), tenantId);
+
+        return alerts
                 .stream()
                 .map(AlertResponse::from)
                 .toList();
@@ -96,17 +100,10 @@ public class AlertService {
      * Valida que o alert pertence ao tenant do caller via shipment.
      */
     @Transactional
-    public AlertResponse resolve(UUID alertId, UUID tenantId) {
+    public AlertResponse resolve(UUID alertId, UUID tenantId, UUID customerId) {
         log.info("Resolving alert id={} for tenant={}", alertId, tenantId);
 
-        Alert alert = alertRepository.findById(alertId)
-                .orElseThrow(() -> new ResourceNotFoundException("Alert", alertId));
-
-        // Isolamento de tenant: alert.shipment.tenant deve ser o tenant do caller
-        if (!alert.getShipment().getTenant().getId().equals(tenantId)) {
-            // Retorna 404 para não revelar existência de recurso de outro tenant
-            throw new ResourceNotFoundException("Alert", alertId);
-        }
+        Alert alert = getScopedAlert(alertId, tenantId, customerId);
 
         if (alert.isResolved()) {
             throw new BusinessException("Alert " + alertId + " is already resolved");
@@ -117,5 +114,23 @@ public class AlertService {
 
         log.info("Alert resolved: id={}", saved.getId());
         return AlertResponse.from(saved);
+    }
+
+    private Shipment getScopedShipment(UUID shipmentId, UUID tenantId, UUID customerId) {
+        if (customerId != null) {
+            return shipmentRepository.findByIdAndTenantIdAndCustomerId(shipmentId, tenantId, customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+        }
+        return shipmentRepository.findByIdAndTenantId(shipmentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Shipment", shipmentId));
+    }
+
+    private Alert getScopedAlert(UUID alertId, UUID tenantId, UUID customerId) {
+        if (customerId != null) {
+            return alertRepository.findByIdAndShipmentTenantIdAndShipmentCustomerId(alertId, tenantId, customerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Alert", alertId));
+        }
+        return alertRepository.findByIdAndShipmentTenantId(alertId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Alert", alertId));
     }
 }

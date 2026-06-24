@@ -9,6 +9,7 @@ import com.freightflow.modules.alert.enums.AlertType;
 import com.freightflow.modules.alert.enums.Severity;
 import com.freightflow.shared.exception.GlobalExceptionHandler;
 import com.freightflow.shared.exception.ResourceNotFoundException;
+import com.freightflow.shared.rbac.RoleCheckAspect;
 import com.freightflow.shared.security.UserPrincipal;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -17,6 +18,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,17 +38,42 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = AlertController.class)
-@Import({TestSecurityConfig.class, GlobalExceptionHandler.class})
+@Import({TestSecurityConfig.class, GlobalExceptionHandler.class, AlertControllerTest.RoleAspectTestConfig.class})
 @AutoConfigureMockMvc(addFilters = true)
 @DisplayName("AlertController")
 class AlertControllerTest {
+
+    @TestConfiguration
+    @EnableAspectJAutoProxy(proxyTargetClass = true)
+    static class RoleAspectTestConfig {
+        @Bean
+        RoleCheckAspect roleCheckAspect() {
+            return new RoleCheckAspect();
+        }
+    }
 
     @Autowired private MockMvc       mockMvc;
     @Autowired private ObjectMapper  objectMapper;
 
     @MockBean  private AlertService  alertService;
 
-    private final UserPrincipal principal = TestDataFactory.principal();
+    private final UserPrincipal adminPrincipal = TestDataFactory.principal();
+    private final UserPrincipal viewerPrincipal = new UserPrincipal(
+            UUID.fromString("bbbb0000-0000-0000-0000-000000000002"),
+            "viewer@mercosul.com",
+            null,
+            TestDataFactory.defaultTenantId(),
+            "VIEWER",
+            null
+    );
+    private final UserPrincipal clientPrincipal = new UserPrincipal(
+            UUID.fromString("bbbb0000-0000-0000-0000-000000000003"),
+            "client@mercosul.com",
+            null,
+            TestDataFactory.defaultTenantId(),
+            "CLIENT",
+            UUID.fromString("99990000-0000-0000-0000-000000000001")
+    );
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -75,7 +104,7 @@ class AlertControllerTest {
                     .thenReturn(List.of(sampleAlert()));
 
             mockMvc.perform(get("/api/v1/alerts")
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$[0].booking").value("A123456789"))
@@ -91,7 +120,7 @@ class AlertControllerTest {
                     .thenReturn(List.of());
 
             mockMvc.perform(get("/api/v1/alerts")
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$.length()").value(0));
@@ -115,11 +144,11 @@ class AlertControllerTest {
         @DisplayName("Deve retornar 200 com lista de alerts do shipment")
         void deveRetornar200ComLista() throws Exception {
             UUID shipmentId = TestDataFactory.defaultShipmentId();
-            when(alertService.findByShipment(shipmentId))
+            when(alertService.findByShipment(shipmentId, TestDataFactory.defaultTenantId(), null))
                     .thenReturn(List.of(sampleAlert()));
 
             mockMvc.perform(get("/api/v1/shipments/{shipmentId}/alerts", shipmentId)
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$[0].shipmentId").value(shipmentId.toString()));
@@ -129,13 +158,25 @@ class AlertControllerTest {
         @DisplayName("Deve retornar 404 quando shipment inexistente")
         void deveRetornar404ShipmentInexistente() throws Exception {
             UUID unknownId = UUID.randomUUID();
-            when(alertService.findByShipment(unknownId))
+            when(alertService.findByShipment(unknownId, TestDataFactory.defaultTenantId(), null))
                     .thenThrow(new ResourceNotFoundException("Shipment", unknownId));
 
             mockMvc.perform(get("/api/v1/shipments/{shipmentId}/alerts", unknownId)
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.title").value("Resource Not Found"));
+        }
+
+        @Test
+        @DisplayName("CLIENT repassa customerId ao listar alerts por shipment")
+        void clientRepassaCustomerIdAoListarAlertsPorShipment() throws Exception {
+            UUID shipmentId = TestDataFactory.defaultShipmentId();
+            when(alertService.findByShipment(shipmentId, TestDataFactory.defaultTenantId(), clientPrincipal.getCustomerId()))
+                    .thenReturn(List.of(sampleAlert()));
+
+            mockMvc.perform(get("/api/v1/shipments/{shipmentId}/alerts", shipmentId)
+                            .with(user(clientPrincipal)))
+                    .andExpect(status().isOk());
         }
     }
 
@@ -160,7 +201,7 @@ class AlertControllerTest {
 
             mockMvc.perform(post("/api/v1/alerts")
                             .with(csrf())
-                            .with(user(principal))
+                            .with(user(adminPrincipal))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -177,7 +218,7 @@ class AlertControllerTest {
 
             mockMvc.perform(post("/api/v1/alerts")
                             .with(csrf())
-                            .with(user(principal))
+                            .with(user(adminPrincipal))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(invalidJson))
                     .andExpect(status().isBadRequest());
@@ -195,7 +236,7 @@ class AlertControllerTest {
 
             mockMvc.perform(post("/api/v1/alerts")
                             .with(csrf())
-                            .with(user(principal))
+                            .with(user(adminPrincipal))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json))
                     .andExpect(status().isBadRequest());
@@ -224,12 +265,12 @@ class AlertControllerTest {
                     Instant.now().minusSeconds(3600)
             );
 
-            when(alertService.resolve(eq(alertId), any(UUID.class)))
+            when(alertService.resolve(eq(alertId), eq(TestDataFactory.defaultTenantId()), eq(null)))
                     .thenReturn(resolved);
 
             mockMvc.perform(post("/api/v1/alerts/{id}/resolve", alertId)
                             .with(csrf())
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.resolved").value(true))
                     .andExpect(jsonPath("$.resolvedAt").isNotEmpty());
@@ -239,13 +280,35 @@ class AlertControllerTest {
         @DisplayName("Deve retornar 404 quando alert nao existe ou pertence a outro tenant")
         void deveRetornar404AlertInexistente() throws Exception {
             UUID unknownId = UUID.randomUUID();
-            when(alertService.resolve(eq(unknownId), any(UUID.class)))
+            when(alertService.resolve(eq(unknownId), eq(TestDataFactory.defaultTenantId()), eq(null)))
                     .thenThrow(new ResourceNotFoundException("Alert", unknownId));
 
             mockMvc.perform(post("/api/v1/alerts/{id}/resolve", unknownId)
                             .with(csrf())
-                            .with(user(principal)))
+                            .with(user(adminPrincipal)))
                     .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("VIEWER nao pode resolver alert")
+        void viewerNaoPodeResolverAlert() throws Exception {
+            UUID alertId = UUID.randomUUID();
+
+            mockMvc.perform(post("/api/v1/alerts/{id}/resolve", alertId)
+                            .with(csrf())
+                            .with(user(viewerPrincipal)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("CLIENT nao pode resolver alert")
+        void clientNaoPodeResolverAlert() throws Exception {
+            UUID alertId = UUID.randomUUID();
+
+            mockMvc.perform(post("/api/v1/alerts/{id}/resolve", alertId)
+                            .with(csrf())
+                            .with(user(clientPrincipal)))
+                    .andExpect(status().isForbidden());
         }
     }
 }
