@@ -11,6 +11,7 @@ import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.vessel.Vessel;
 import com.freightflow.modules.vessel.VesselRepository;
 import com.freightflow.modules.voyage.dto.CreateVoyageRequest;
+import com.freightflow.modules.voyage.dto.VoyageFleetMapReadinessResponse;
 import com.freightflow.modules.voyage.dto.UpdateVoyageRequest;
 import com.freightflow.modules.voyage.dto.VoyageResponse;
 import com.freightflow.modules.voyage.enums.VoyageStatus;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -54,17 +56,20 @@ public class VoyageService {
     private final PortRepository      portRepository;
     private final ShipmentRepository  shipmentRepository;
     private final VesselPositionResolver vesselPositionResolver;
+    private final VoyageFleetMapEligibilityService voyageFleetMapEligibilityService;
 
     public VoyageService(VoyageRepository voyageRepository,
                          VesselRepository vesselRepository,
                          PortRepository portRepository,
                          ShipmentRepository shipmentRepository,
-                         VesselPositionResolver vesselPositionResolver) {
+                         VesselPositionResolver vesselPositionResolver,
+                         VoyageFleetMapEligibilityService voyageFleetMapEligibilityService) {
         this.voyageRepository   = voyageRepository;
         this.vesselRepository   = vesselRepository;
         this.portRepository     = portRepository;
         this.shipmentRepository = shipmentRepository;
         this.vesselPositionResolver = vesselPositionResolver;
+        this.voyageFleetMapEligibilityService = voyageFleetMapEligibilityService;
     }
 
     // ==================== Queries ====================
@@ -132,6 +137,9 @@ public class VoyageService {
                 request.voyageNumber(), vessel, originPort, destinationPort,
                 request.etd(), request.eta()
         );
+        if (request.active() != null) {
+            voyage.setActive(request.active());
+        }
 
         Voyage saved = voyageRepository.save(voyage);
         log.info("Voyage created: id={}, number={}", saved.getId(), saved.getVoyageNumber());
@@ -144,6 +152,27 @@ public class VoyageService {
         Voyage voyage = voyageRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Voyage", id));
 
+        if (request.voyageNumber() != null) {
+            if (voyageRepository.existsByVoyageNumberAndIdNot(request.voyageNumber(), id)) {
+                throw new BusinessException("Voyage number " + request.voyageNumber() + " already exists");
+            }
+            voyage.setVoyageNumber(request.voyageNumber());
+        }
+        if (request.vesselId() != null) {
+            Vessel vessel = vesselRepository.findById(request.vesselId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Vessel", request.vesselId()));
+            voyage.setVessel(vessel);
+        }
+        if (request.originPortId() != null) {
+            Port originPort = portRepository.findById(request.originPortId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Port", request.originPortId()));
+            voyage.setOriginPort(originPort);
+        }
+        if (request.destinationPortId() != null) {
+            Port destinationPort = portRepository.findById(request.destinationPortId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Port", request.destinationPortId()));
+            voyage.setDestinationPort(destinationPort);
+        }
         if (request.status() != null) {
             VoyageStatus current = voyage.getStatus();
             VoyageStatus next = request.status();
@@ -167,9 +196,43 @@ public class VoyageService {
         if (request.ata() != null) {
             voyage.setAta(request.ata());
         }
+        if (request.active() != null) {
+            voyage.setActive(request.active());
+        }
 
         Voyage saved = voyageRepository.save(voyage);
         return VoyageResponse.from(saved);
+    }
+
+    public List<VoyageFleetMapReadinessResponse> listFleetMapReadiness(UUID tenantId, UUID customerId, Boolean eligible) {
+        var voyages = voyageRepository.findAllWithDetails(org.springframework.data.domain.Pageable.unpaged()).getContent();
+        if (voyages.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> voyageIds = voyages.stream().map(Voyage::getId).toList();
+        Map<UUID, Long> shipmentCounts = (customerId != null
+                ? shipmentRepository.countByVoyageIdsAndTenantIdAndCustomerId(voyageIds, tenantId, customerId)
+                : shipmentRepository.countByVoyageIdsAndTenantId(voyageIds, tenantId))
+                .stream()
+                .collect(Collectors.toMap(
+                        ShipmentRepository.VoyageShipmentCountView::getVoyageId,
+                        ShipmentRepository.VoyageShipmentCountView::getShipmentCount
+                ));
+
+        return voyages.stream()
+                .map(voyage -> {
+                    long linkedShipmentCount = shipmentCounts.getOrDefault(voyage.getId(), 0L);
+                    var readiness = voyageFleetMapEligibilityService.evaluate(voyage, linkedShipmentCount);
+                    return VoyageFleetMapReadinessResponse.from(
+                            voyage,
+                            linkedShipmentCount,
+                            readiness.eligibleForFleetMap(),
+                            readiness.ineligibilityReasons()
+                    );
+                })
+                .filter(response -> eligible == null || response.eligibleForFleetMap() == eligible)
+                .toList();
     }
 
     public List<ShipmentSummaryResponse> getShipmentsByVoyage(UUID voyageId, UUID tenantId, UUID customerId) {

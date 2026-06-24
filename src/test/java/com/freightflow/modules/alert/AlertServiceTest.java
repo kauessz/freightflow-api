@@ -26,6 +26,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +37,7 @@ class AlertServiceTest {
 
     @Mock private AlertRepository alertRepository;
     @Mock private ShipmentRepository shipmentRepository;
+    @Mock private AlertEventPublisher alertEventPublisher;
 
     @InjectMocks
     private AlertService alertService;
@@ -117,6 +121,59 @@ class AlertServiceTest {
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Shipment");
         }
+
+        @Test
+        @DisplayName("should_publishCriticalAlertEvent_when_severityIsCritical")
+        void should_publishCriticalAlertEvent_when_severityIsCritical() {
+            // Arrange
+            UUID tenantId   = tenant.getId();
+            UUID shipmentId = shipment.getId();
+            CreateAlertRequest request = new CreateAlertRequest(
+                    shipmentId, AlertType.CUSTOMS_HOLD, Severity.CRITICAL, "Customs hold at Santos");
+
+            Alert saved = TestDataFactory.alert(shipment);
+            TestDataFactory.setEntityId(saved, UUID.randomUUID());
+            // Override severity to CRITICAL via reflection (TestDataFactory creates MEDIUM by default)
+            setSeverity(saved, Severity.CRITICAL);
+
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId))
+                    .thenReturn(Optional.of(shipment));
+            when(alertRepository.existsByShipmentIdAndTypeAndResolvedFalse(shipmentId, AlertType.CUSTOMS_HOLD))
+                    .thenReturn(false);
+            when(alertRepository.save(any(Alert.class))).thenReturn(saved);
+
+            // Act
+            alertService.create(request, tenantId);
+
+            // Assert — publisher must be called exactly once with the saved alert
+            verify(alertEventPublisher, times(1)).publishCriticalAlert(saved);
+        }
+
+        @Test
+        @DisplayName("should_notPublishEvent_when_severityIsLow")
+        void should_notPublishEvent_when_severityIsLow() {
+            // Arrange
+            UUID tenantId   = tenant.getId();
+            UUID shipmentId = shipment.getId();
+            CreateAlertRequest request = new CreateAlertRequest(
+                    shipmentId, AlertType.DELAY, Severity.LOW, "Minor delay, no action required");
+
+            Alert saved = TestDataFactory.alert(shipment);
+            TestDataFactory.setEntityId(saved, UUID.randomUUID());
+            setSeverity(saved, Severity.LOW);
+
+            when(shipmentRepository.findByIdAndTenantId(shipmentId, tenantId))
+                    .thenReturn(Optional.of(shipment));
+            when(alertRepository.existsByShipmentIdAndTypeAndResolvedFalse(shipmentId, AlertType.DELAY))
+                    .thenReturn(false);
+            when(alertRepository.save(any(Alert.class))).thenReturn(saved);
+
+            // Act
+            alertService.create(request, tenantId);
+
+            // Assert — publisher must NOT be called for LOW severity
+            verify(alertEventPublisher, never()).publishCriticalAlert(any());
+        }
     }
 
     // ── resolve() ─────────────────────────────────────────────────────────
@@ -188,6 +245,23 @@ class AlertServiceTest {
             // Assert
             assertThat(result).hasSize(2);
             assertThat(result).allMatch(a -> !a.resolved());
+        }
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Sets the severity field via reflection.
+     * Necessary because Alert has no setter for severity (immutable after construction
+     * through the public constructor).
+     */
+    private void setSeverity(Alert alert, Severity severity) {
+        try {
+            var field = Alert.class.getDeclaredField("severity");
+            field.setAccessible(true);
+            field.set(alert, severity);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to set severity on Alert", e);
         }
     }
 }

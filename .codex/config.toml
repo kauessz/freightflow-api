@@ -1,22 +1,10 @@
 model = "gpt-5.4"
+web_search = "cached"
 
-# Faz o Codex tratar a raiz do repositório Git como projeto.
 project_root_markers = [".git"]
-
-# Mantém descoberta padrão de instruções e aceita nomes alternativos se você quiser usar no futuro.
 project_doc_fallback_filenames = ["AGENTS.md", ".agents.md", "TEAM_GUIDE.md"]
 project_doc_max_bytes = 65536
 
-[tools]
-web_search = true
-
-# Mantém o comportamento conservador:
-# usar subagentes só quando você pedir explicitamente.
-[agents]
-enabled = true
-
 [profiles.safe_incremental]
 model = "gpt-5.4"
-
-[profiles.safe_incremental.tools]
-web_search = true
+web_search = "cached"

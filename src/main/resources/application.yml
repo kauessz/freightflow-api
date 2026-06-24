@@ -21,6 +21,14 @@ spring:
   devtools:
     restart:
       enabled: false
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
 server:
   port: 8080
@@ -51,6 +59,19 @@ freightflow:
   stripe:
     secret-key: ${STRIPE_SECRET_KEY:}
     publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+  cache:
+    ais-ttl-minutes: 5
+  tracking:
+    interval-ms: 300000  # 5 minutes
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:}
+    bucket: ${STORAGE_BUCKET:freightflow-docs}
+    access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+    secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
+  notification:
+    from-email: ${NOTIFICATION_FROM_EMAIL:noreply@freightflow.com}
+    from-name: "FreightFlow"
 
 ---
 spring:
@@ -76,8 +97,20 @@ spring:
   rabbitmq:
     host: localhost
     port: 5672
-    username: guest
-    password: guest
+    username: freightflow
+    password: freightflow
+
+freightflow:
+  cache:
+    ais-ttl-minutes: 5
+  tracking:
+    interval-ms: 300000  # 5 minutes
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:}
+    bucket: ${STORAGE_BUCKET:freightflow-docs}
+    access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+    secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080/mock-storage}
 
 logging:
   level:
@@ -110,6 +143,18 @@ spring:
     username: guest
     password: guest
 
+freightflow:
+  cache:
+    ais-ttl-minutes: 1
+  tracking:
+    interval-ms: 999999999  # effectively never runs in tests
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:}
+    bucket: ${STORAGE_BUCKET:freightflow-docs-test}
+    access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+    secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080/mock-storage}
+
 ---
 spring:
   config:
@@ -134,6 +179,14 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
 server:
   port: ${PORT:8080}
@@ -142,6 +195,19 @@ freightflow:
   jwt:
     secret: ${JWT_SECRET}
     expiration-ms: ${JWT_EXPIRATION:86400000}
+  cache:
+    ais-ttl-minutes: 5
+  tracking:
+    interval-ms: 300000  # 5 minutes
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:}
+    bucket: ${STORAGE_BUCKET:freightflow-docs}
+    access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+    secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
+  notification:
+    from-email: ${NOTIFICATION_FROM_EMAIL:noreply@freightflow.com}
+    from-name: "FreightFlow"
 
 logging:
   level:
@@ -171,6 +237,29 @@ spring:
     url: ${REDIS_URL}
   rabbitmq:
     url: ${RABBITMQ_URL}
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+freightflow:
+  cache:
+    ais-ttl-minutes: 5
+  tracking:
+    interval-ms: 300000  # 5 minutes
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:}
+    bucket: ${STORAGE_BUCKET:freightflow-docs}
+    access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+    secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
+  notification:
+    from-email: ${NOTIFICATION_FROM_EMAIL:noreply@freightflow.com}
+    from-name: "FreightFlow"
 
 logging:
   level:

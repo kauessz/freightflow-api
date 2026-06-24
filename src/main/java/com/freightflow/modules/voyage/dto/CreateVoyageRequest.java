@@ -2,15 +2,14 @@ package com.freightflow.modules.voyage.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.util.UUID;
 
 public record CreateVoyageRequest(
     @NotBlank(message = "Voyage number is required")
-    @Pattern(regexp = "^[A-Z]{2,5}-\\d{4}-\\d{3,5}$",
-             message = "Voyage number must follow pattern: XX-YYYY-NNN (e.g., MSC-2026-001)")
+    @Size(min = 2, max = 30, message = "Voyage number must be between 2 and 30 characters")
     String voyageNumber,
 
     @NotNull(message = "Vessel ID is required")
@@ -26,5 +25,7 @@ public record CreateVoyageRequest(
     Instant etd,
 
     @NotNull(message = "ETA is required")
-    Instant eta
+    Instant eta,
+
+    Boolean active
 ) {}

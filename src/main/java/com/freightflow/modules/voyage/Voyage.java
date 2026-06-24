@@ -49,6 +49,9 @@ public class Voyage {
     @Enumerated(EnumType.STRING)
     private VoyageStatus status;
 
+    @Column(nullable = false)
+    private boolean active;
+
     @OneToMany(mappedBy = "voyage", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Shipment> shipments = new ArrayList<>();
 
@@ -69,6 +72,7 @@ public class Voyage {
         this.etd = etd;
         this.eta = eta;
         this.status = VoyageStatus.SCHEDULED;
+        this.active = true;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
@@ -96,16 +100,36 @@ public class Voyage {
         return voyageNumber;
     }
 
+    public void setVoyageNumber(String voyageNumber) {
+        this.voyageNumber = voyageNumber;
+        this.updatedAt = Instant.now();
+    }
+
     public Vessel getVessel() {
         return vessel;
+    }
+
+    public void setVessel(Vessel vessel) {
+        this.vessel = vessel;
+        this.updatedAt = Instant.now();
     }
 
     public Port getOriginPort() {
         return originPort;
     }
 
+    public void setOriginPort(Port originPort) {
+        this.originPort = originPort;
+        this.updatedAt = Instant.now();
+    }
+
     public Port getDestinationPort() {
         return destinationPort;
+    }
+
+    public void setDestinationPort(Port destinationPort) {
+        this.destinationPort = destinationPort;
+        this.updatedAt = Instant.now();
     }
 
     public Instant getEtd() {
@@ -155,6 +179,15 @@ public class Voyage {
 
     public List<Shipment> getShipments() {
         return shipments;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+        this.updatedAt = Instant.now();
     }
 
     public Instant getCreatedAt() {

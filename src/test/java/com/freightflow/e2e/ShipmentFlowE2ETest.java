@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>Aqui o banco é limpo apenas uma vez, no {@code @BeforeAll}, e o estado
  * (token, shipmentId) é compartilhado via campos estáticos.</p>
  */
+@Disabled("Requires Docker environment — runs on CI via GitHub Actions")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

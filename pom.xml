@@ -119,6 +119,19 @@
             <version>${stripe.version}</version>
         </dependency>
 
+        <!-- ==================== Storage (Cloudflare R2 / S3-compatible) ==================== -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.0</version>
+        </dependency>
+
+        <!-- ==================== Email ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- ==================== Dev Tools ==================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -13,6 +13,8 @@ import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.modules.vessel.Vessel;
 import com.freightflow.modules.vessel.VesselRepository;
 import com.freightflow.modules.voyage.dto.CreateVoyageRequest;
+import com.freightflow.modules.voyage.dto.FleetMapIneligibilityReason;
+import com.freightflow.modules.voyage.dto.VoyageFleetMapReadinessResponse;
 import com.freightflow.modules.voyage.dto.UpdateVoyageRequest;
 import com.freightflow.modules.voyage.dto.VoyageResponse;
 import com.freightflow.modules.voyage.enums.VoyageStatus;
@@ -48,6 +50,7 @@ class VoyageServiceTest {
     @Mock private PortRepository portRepository;
     @Mock private ShipmentRepository shipmentRepository;
     @Mock private VesselPositionResolver vesselPositionResolver;
+    @Mock private VoyageFleetMapEligibilityService voyageFleetMapEligibilityService;
 
     @InjectMocks
     private VoyageService voyageService;
@@ -115,7 +118,7 @@ class VoyageServiceTest {
             Instant etd = Instant.now().plus(2, ChronoUnit.DAYS);
             Instant eta = Instant.now().plus(10, ChronoUnit.DAYS);
             CreateVoyageRequest request = new CreateVoyageRequest(
-                    "MSC-2026-001", vessel.getId(), origin.getId(), destination.getId(), etd, eta);
+                    "MSC-2026-001", vessel.getId(), origin.getId(), destination.getId(), etd, eta, true);
 
             when(voyageRepository.existsByVoyageNumber("MSC-2026-001")).thenReturn(false);
             when(vesselRepository.findById(vessel.getId())).thenReturn(Optional.of(vessel));
@@ -137,7 +140,7 @@ class VoyageServiceTest {
             Instant pastEtd = Instant.now().minus(1, ChronoUnit.HOURS);
             Instant eta     = Instant.now().plus(10, ChronoUnit.DAYS);
             CreateVoyageRequest request = new CreateVoyageRequest(
-                    "MSC-2026-002", vessel.getId(), origin.getId(), destination.getId(), pastEtd, eta);
+                    "MSC-2026-002", vessel.getId(), origin.getId(), destination.getId(), pastEtd, eta, null);
             when(voyageRepository.existsByVoyageNumber("MSC-2026-002")).thenReturn(false);
 
             // Act & Assert
@@ -153,7 +156,7 @@ class VoyageServiceTest {
             Instant etd = Instant.now().plus(5, ChronoUnit.DAYS);
             Instant eta = Instant.now().plus(2, ChronoUnit.DAYS);   // ETA before ETD
             CreateVoyageRequest request = new CreateVoyageRequest(
-                    "MSC-2026-003", vessel.getId(), origin.getId(), destination.getId(), etd, eta);
+                    "MSC-2026-003", vessel.getId(), origin.getId(), destination.getId(), etd, eta, null);
             when(voyageRepository.existsByVoyageNumber("MSC-2026-003")).thenReturn(false);
 
             // Act & Assert
@@ -170,7 +173,8 @@ class VoyageServiceTest {
             CreateVoyageRequest request = new CreateVoyageRequest(
                     "MSC-2026-001", vessel.getId(), origin.getId(), destination.getId(),
                     Instant.now().plus(2, ChronoUnit.DAYS),
-                    Instant.now().plus(10, ChronoUnit.DAYS));
+                    Instant.now().plus(10, ChronoUnit.DAYS),
+                    null);
 
             // Act & Assert
             assertThatThrownBy(() -> voyageService.create(request))
@@ -190,7 +194,6 @@ class VoyageServiceTest {
             voyage.setStatus(status);
             when(voyageRepository.findByIdWithDetails(voyage.getId()))
                     .thenReturn(Optional.of(voyage));
-            when(voyageRepository.save(any(Voyage.class))).thenReturn(voyage);
         }
 
         @Test
@@ -198,7 +201,8 @@ class VoyageServiceTest {
         void should_transitionStatus_SCHEDULED_to_DEPARTED() {
             // Arrange — voyage starts SCHEDULED
             mockFindVoyageWithStatus(VoyageStatus.SCHEDULED);
-            UpdateVoyageRequest request = new UpdateVoyageRequest(VoyageStatus.DEPARTED, null, null, null, null);
+            when(voyageRepository.save(any(Voyage.class))).thenReturn(voyage);
+            UpdateVoyageRequest request = new UpdateVoyageRequest(null, null, null, null, VoyageStatus.DEPARTED, null, null, null, null, null);
 
             // Act
             VoyageResponse result = voyageService.update(voyage.getId(), request);
@@ -211,7 +215,8 @@ class VoyageServiceTest {
         @DisplayName("should_transitionStatus_DEPARTED_to_IN_TRANSIT")
         void should_transitionStatus_DEPARTED_to_IN_TRANSIT() {
             mockFindVoyageWithStatus(VoyageStatus.DEPARTED);
-            UpdateVoyageRequest request = new UpdateVoyageRequest(VoyageStatus.IN_TRANSIT, null, null, null, null);
+            when(voyageRepository.save(any(Voyage.class))).thenReturn(voyage);
+            UpdateVoyageRequest request = new UpdateVoyageRequest(null, null, null, null, VoyageStatus.IN_TRANSIT, null, null, null, null, null);
 
             voyageService.update(voyage.getId(), request);
             // No exception = success
@@ -222,7 +227,8 @@ class VoyageServiceTest {
         void should_transitionStatus_when_sequenceIsValid_ARRIVED_to_COMPLETED() {
             // Arrange
             mockFindVoyageWithStatus(VoyageStatus.ARRIVED);
-            UpdateVoyageRequest request = new UpdateVoyageRequest(VoyageStatus.COMPLETED, null, null, null, null);
+            when(voyageRepository.save(any(Voyage.class))).thenReturn(voyage);
+            UpdateVoyageRequest request = new UpdateVoyageRequest(null, null, null, null, VoyageStatus.COMPLETED, null, null, null, null, null);
 
             // Act & Assert — no exception expected
             voyageService.update(voyage.getId(), request);
@@ -233,7 +239,7 @@ class VoyageServiceTest {
         void should_throwBusinessException_when_statusTransitionIsInvalid() {
             // Arrange — ARRIVED → SCHEDULED is invalid
             mockFindVoyageWithStatus(VoyageStatus.ARRIVED);
-            UpdateVoyageRequest request = new UpdateVoyageRequest(VoyageStatus.SCHEDULED, null, null, null, null);
+            UpdateVoyageRequest request = new UpdateVoyageRequest(null, null, null, null, VoyageStatus.SCHEDULED, null, null, null, null, null);
 
             // Act & Assert
             assertThatThrownBy(() -> voyageService.update(voyage.getId(), request))
@@ -246,7 +252,7 @@ class VoyageServiceTest {
         void should_throwBusinessException_when_completedVoyageCannotTransition() {
             // Arrange — COMPLETED is terminal, no transitions allowed
             mockFindVoyageWithStatus(VoyageStatus.COMPLETED);
-            UpdateVoyageRequest request = new UpdateVoyageRequest(VoyageStatus.ARRIVED, null, null, null, null);
+            UpdateVoyageRequest request = new UpdateVoyageRequest(null, null, null, null, VoyageStatus.ARRIVED, null, null, null, null, null);
 
             // Act & Assert
             assertThatThrownBy(() -> voyageService.update(voyage.getId(), request))
@@ -275,5 +281,64 @@ class VoyageServiceTest {
             assertThat(result).hasSize(1);
             verify(shipmentRepository).findByVoyageIdAndTenantIdAndCustomerId(voyage.getId(), tenantId, customerId);
         }
+    }
+
+    @Nested
+    @DisplayName("listFleetMapReadiness()")
+    class ListFleetMapReadinessTests {
+
+        @Test
+        @DisplayName("should_applyTenantAndCustomerShipmentCounts_when_customerIsProvided")
+        void should_applyTenantAndCustomerShipmentCounts_when_customerIsProvided() {
+            UUID tenantId = TestDataFactory.defaultTenantId();
+            UUID customerId = UUID.randomUUID();
+
+            when(voyageRepository.findAllWithDetails(any())).thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(voyage)));
+            when(shipmentRepository.countByVoyageIdsAndTenantIdAndCustomerId(List.of(voyage.getId()), tenantId, customerId))
+                    .thenReturn(List.of(countView(voyage.getId(), 2L)));
+            when(voyageFleetMapEligibilityService.evaluate(voyage, 2L))
+                    .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(true, List.of()));
+
+            List<VoyageFleetMapReadinessResponse> result = voyageService.listFleetMapReadiness(tenantId, customerId, null);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).linkedShipmentCount()).isEqualTo(2L);
+            verify(shipmentRepository).countByVoyageIdsAndTenantIdAndCustomerId(List.of(voyage.getId()), tenantId, customerId);
+        }
+
+        @Test
+        @DisplayName("should_filterByEligibility_when_requested")
+        void should_filterByEligibility_when_requested() {
+            UUID tenantId = TestDataFactory.defaultTenantId();
+
+            when(voyageRepository.findAllWithDetails(any())).thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(voyage)));
+            when(shipmentRepository.countByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
+                    .thenReturn(List.of(countView(voyage.getId(), 0L)));
+            when(voyageFleetMapEligibilityService.evaluate(voyage, 0L))
+                    .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(
+                            false,
+                            List.of(FleetMapIneligibilityReason.NO_LINKED_SHIPMENTS)
+                    ));
+
+            List<VoyageFleetMapReadinessResponse> result = voyageService.listFleetMapReadiness(tenantId, null, false);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).eligibleForFleetMap()).isFalse();
+            assertThat(result.get(0).ineligibilityReasons()).contains(FleetMapIneligibilityReason.NO_LINKED_SHIPMENTS);
+        }
+    }
+
+    private ShipmentRepository.VoyageShipmentCountView countView(UUID voyageId, long shipmentCount) {
+        return new ShipmentRepository.VoyageShipmentCountView() {
+            @Override
+            public UUID getVoyageId() {
+                return voyageId;
+            }
+
+            @Override
+            public long getShipmentCount() {
+                return shipmentCount;
+            }
+        };
     }
 }

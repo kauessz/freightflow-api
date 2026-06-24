@@ -2,6 +2,7 @@ package com.freightflow.modules.alert;
 
 import com.freightflow.modules.alert.dto.AlertResponse;
 import com.freightflow.modules.alert.dto.CreateAlertRequest;
+import com.freightflow.modules.alert.enums.Severity;
 import com.freightflow.modules.shipment.Shipment;
 import com.freightflow.modules.shipment.repository.ShipmentRepository;
 import com.freightflow.shared.exception.BusinessException;
@@ -22,11 +23,14 @@ public class AlertService {
 
     private final AlertRepository alertRepository;
     private final ShipmentRepository shipmentRepository;
+    private final AlertEventPublisher alertEventPublisher;
 
     public AlertService(AlertRepository alertRepository,
-                        ShipmentRepository shipmentRepository) {
+                        ShipmentRepository shipmentRepository,
+                        AlertEventPublisher alertEventPublisher) {
         this.alertRepository = alertRepository;
         this.shipmentRepository = shipmentRepository;
+        this.alertEventPublisher = alertEventPublisher;
     }
 
     // ==================== Queries ====================
@@ -62,6 +66,7 @@ public class AlertService {
     /**
      * Cria um alert para um embarque.
      * Impede duplicatas: não pode existir alert aberto do mesmo tipo para o mesmo shipment.
+     * Publica evento no RabbitMQ se severity == HIGH ou CRITICAL.
      */
     @Transactional
     public AlertResponse create(CreateAlertRequest request, UUID tenantId) {
@@ -77,6 +82,10 @@ public class AlertService {
 
         Alert alert = new Alert(shipment, request.type(), request.severity(), request.message());
         Alert saved = alertRepository.save(alert);
+
+        if (saved.getSeverity() == Severity.HIGH || saved.getSeverity() == Severity.CRITICAL) {
+            alertEventPublisher.publishCriticalAlert(saved);
+        }
 
         log.info("Alert created: id={}, type={}, shipment={}", saved.getId(), saved.getType(), shipment.getBooking());
         return AlertResponse.from(saved);

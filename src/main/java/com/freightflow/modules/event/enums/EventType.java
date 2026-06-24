@@ -8,5 +8,7 @@ public enum EventType {
     ARRIVED,
     GATE_OUT,
     CUSTOMS_HOLD,
-    CUSTOMS_RELEASE
+    CUSTOMS_RELEASE,
+    /** Periodic AIS-derived position snapshot recorded by PositionTrackingJob. */
+    POSITION_UPDATE
 }

@@ -12,4 +12,6 @@ public interface VesselRepository extends JpaRepository<Vessel, UUID> {
     Optional<Vessel> findByImo(String imo);
 
     boolean existsByImo(String imo);
+
+    boolean existsByImoAndIdNot(String imo, UUID id);
 }

@@ -5,6 +5,7 @@ import com.freightflow.modules.shipment.enums.ShipmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -13,7 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 
-public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
+public interface ShipmentRepository extends JpaRepository<Shipment, UUID>, JpaSpecificationExecutor<Shipment> {
 
     interface VoyageShipmentCountView {
         UUID getVoyageId();
@@ -68,6 +69,11 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID> {
      * Usado em getById() para evitar vazamento cross-tenant.
      */
     Optional<Shipment> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    /**
+     * Variante para CLIENT role: restringe por tenant e customer ao mesmo tempo.
+     */
+    Optional<Shipment> findByIdAndTenantIdAndCustomerId(UUID id, UUID tenantId, UUID customerId);
 
     // ==================== Fleet Map — "My shipments" ====================
 

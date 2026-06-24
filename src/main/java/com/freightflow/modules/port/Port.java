@@ -23,14 +23,20 @@ public class Port {
     @Column(nullable = false)
     private String timezone;
 
-    @Column(nullable = false)
+    @Column
     private Double latitude;
 
-    @Column(nullable = false)
+    @Column
     private Double longitude;
 
     @Column(nullable = false)
+    private boolean active;
+
+    @Column(nullable = false)
     private Instant createdAt;
+
+    @Column(nullable = false)
+    private Instant updatedAt;
 
     protected Port() {}
 
@@ -41,7 +47,9 @@ public class Port {
         this.timezone = timezone;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.active = true;
         this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
     }
 
     public UUID getId() {
@@ -72,7 +80,50 @@ public class Port {
         return longitude;
     }
 
+    public boolean isActive() {
+        return active;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUnlocode(String unlocode) {
+        this.unlocode = unlocode;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+        this.updatedAt = Instant.now();
     }
 }

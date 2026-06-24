@@ -6,6 +6,7 @@ import com.freightflow.modules.auth.TenantRepository;
 import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
+import com.freightflow.modules.shipment.dto.ShipmentFilterParams;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
 import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
@@ -29,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +58,10 @@ class ShipmentServiceTest {
     private Port rotterdam;
     private Tenant tenant;
 
+    /** Filtro vazio: nenhum critério de busca — comportamento da listagem padrão. */
+    private static final ShipmentFilterParams NO_FILTERS =
+            new ShipmentFilterParams(null, null, null, null, null, null);
+
     @BeforeEach
     void setUp() {
         tenant = TestDataFactory.tenant();
@@ -76,14 +82,14 @@ class ShipmentServiceTest {
         void deveRetornarPaginaDeShipments() {
             Pageable pageable = PageRequest.of(0, 20);
             var page = new PageImpl<>(List.of(shipment), pageable, 1);
-            when(shipmentRepository.findByTenantId(tenant.getId(), pageable)).thenReturn(page);
+            when(shipmentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
-            PageResponse<ShipmentResponse> result = shipmentService.list(tenant.getId(), pageable);
+            PageResponse<ShipmentResponse> result = shipmentService.list(tenant.getId(), NO_FILTERS, pageable);
 
             assertThat(result.data()).hasSize(1);
             assertThat(result.meta().total()).isEqualTo(1);
             assertThat(result.data().get(0).booking()).isEqualTo("A123456789");
-            verify(shipmentRepository).findByTenantId(tenant.getId(), pageable);
+            verify(shipmentRepository).findAll(any(Specification.class), eq(pageable));
         }
 
         @Test
@@ -91,12 +97,53 @@ class ShipmentServiceTest {
         void deveRetornarPaginaVazia() {
             Pageable pageable = PageRequest.of(0, 20);
             var page = new PageImpl<Shipment>(List.of(), pageable, 0);
-            when(shipmentRepository.findByTenantId(tenant.getId(), pageable)).thenReturn(page);
+            when(shipmentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
 
-            PageResponse<ShipmentResponse> result = shipmentService.list(tenant.getId(), pageable);
+            PageResponse<ShipmentResponse> result = shipmentService.list(tenant.getId(), NO_FILTERS, pageable);
 
             assertThat(result.data()).isEmpty();
             assertThat(result.meta().total()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Deve filtrar por booking parcial — repositorio recebe Specification")
+        void deveFiltrarPorBookingParcial() {
+            Pageable pageable = PageRequest.of(0, 20);
+            ShipmentFilterParams filters = new ShipmentFilterParams("P104", null, null, null, null, null);
+
+            // O repositório mock retorna apenas o shipment correspondente ao filtro
+            var page = new PageImpl<>(List.of(shipment), pageable, 1);
+            when(shipmentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+
+            PageResponse<ShipmentResponse> result = shipmentService.list(tenant.getId(), filters, pageable);
+
+            assertThat(result.data()).hasSize(1);
+            assertThat(result.meta().total()).isEqualTo(1);
+            // A Specification foi construída e passada ao repositório
+            verify(shipmentRepository).findAll(any(Specification.class), eq(pageable));
+            // O método legado findByTenantId não deve ser chamado
+            verify(shipmentRepository, never()).findByTenantId(any(), any());
+        }
+
+        @Test
+        @DisplayName("Deve filtrar por status IN_TRANSIT — repositorio recebe Specification")
+        void deveFiltrarPorStatusInTransit() {
+            Pageable pageable = PageRequest.of(0, 20);
+            ShipmentFilterParams filters = new ShipmentFilterParams(null, "IN_TRANSIT", null, null, null, null);
+
+            // Cria um shipment com status IN_TRANSIT para simular o resultado filtrado
+            Shipment transitShipment = TestDataFactory.shipment(UUID.randomUUID(), "P999999999");
+            transitShipment.setStatus(ShipmentStatus.IN_TRANSIT);
+
+            var page = new PageImpl<>(List.of(transitShipment), pageable, 1);
+            when(shipmentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+
+            PageResponse<ShipmentResponse> result = shipmentService.list(tenant.getId(), filters, pageable);
+
+            assertThat(result.data()).hasSize(1);
+            assertThat(result.data().get(0).status()).isEqualTo(ShipmentStatus.IN_TRANSIT);
+            verify(shipmentRepository).findAll(any(Specification.class), eq(pageable));
+            verify(shipmentRepository, never()).findByTenantId(any(), any());
         }
     }
 
@@ -127,6 +174,18 @@ class ShipmentServiceTest {
             when(shipmentRepository.findByIdAndTenantId(id, tenantId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> shipmentService.getById(id, tenantId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+        }
+
+        @Test
+        @DisplayName("Deve restringir CLIENT ao proprio customer dentro do tenant")
+        void deveRestringirClientAoProprioCustomer() {
+            UUID customerId = UUID.randomUUID();
+            when(shipmentRepository.findByIdAndTenantIdAndCustomerId(shipment.getId(), tenant.getId(), customerId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> shipmentService.getById(shipment.getId(), tenant.getId(), customerId))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Shipment");
         }
@@ -214,14 +273,14 @@ class ShipmentServiceTest {
         @Test
         @DisplayName("Deve atualizar campos parcialmente")
         void deveAtualizarParcialmente() {
-            when(shipmentRepository.findById(shipment.getId())).thenReturn(Optional.of(shipment));
+            when(shipmentRepository.findByIdAndTenantId(shipment.getId(), tenant.getId())).thenReturn(Optional.of(shipment));
             when(shipmentRepository.save(any(Shipment.class))).thenAnswer(inv -> inv.getArgument(0));
 
             UpdateShipmentRequest request = new UpdateShipmentRequest(
                     "TRIU9999999", ContainerType.REEFER40, "New Consignee", null
             );
 
-            ShipmentResponse result = shipmentService.update(shipment.getId(), request);
+            ShipmentResponse result = shipmentService.update(shipment.getId(), request, tenant.getId(), null);
 
             assertThat(result.containerNumber()).isEqualTo("TRIU9999999");
             assertThat(result.containerType()).isEqualTo(ContainerType.REEFER40);
@@ -230,15 +289,49 @@ class ShipmentServiceTest {
         @Test
         @DisplayName("Deve manter campos nulos inalterados")
         void deveManterCamposNulosInalterados() {
-            when(shipmentRepository.findById(shipment.getId())).thenReturn(Optional.of(shipment));
+            when(shipmentRepository.findByIdAndTenantId(shipment.getId(), tenant.getId())).thenReturn(Optional.of(shipment));
             when(shipmentRepository.save(any(Shipment.class))).thenAnswer(inv -> inv.getArgument(0));
 
             UpdateShipmentRequest request = new UpdateShipmentRequest(null, null, null, null);
 
-            ShipmentResponse result = shipmentService.update(shipment.getId(), request);
+            ShipmentResponse result = shipmentService.update(shipment.getId(), request, tenant.getId(), null);
 
             assertThat(result.containerNumber()).isEqualTo("MSCU1234567");
             assertThat(result.containerType()).isEqualTo(ContainerType.TEU40);
+        }
+
+        @Test
+        @DisplayName("Nao deve atualizar shipment de outro tenant")
+        void naoDeveAtualizarShipmentDeOutroTenant() {
+            when(shipmentRepository.findByIdAndTenantId(shipment.getId(), tenant.getId())).thenReturn(Optional.empty());
+
+            UpdateShipmentRequest request = new UpdateShipmentRequest(
+                    "TRIU9999999", ContainerType.REEFER40, "New Consignee", null
+            );
+
+            assertThatThrownBy(() -> shipmentService.update(shipment.getId(), request, tenant.getId(), null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+
+            verify(shipmentRepository, never()).save(any(Shipment.class));
+        }
+
+        @Test
+        @DisplayName("CLIENT nao deve atualizar shipment de outro customer no mesmo tenant")
+        void clientNaoDeveAtualizarShipmentDeOutroCustomer() {
+            UUID customerId = UUID.randomUUID();
+            when(shipmentRepository.findByIdAndTenantIdAndCustomerId(shipment.getId(), tenant.getId(), customerId))
+                    .thenReturn(Optional.empty());
+
+            UpdateShipmentRequest request = new UpdateShipmentRequest(
+                    "TRIU9999999", ContainerType.REEFER40, "New Consignee", null
+            );
+
+            assertThatThrownBy(() -> shipmentService.update(shipment.getId(), request, tenant.getId(), customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+
+            verify(shipmentRepository, never()).save(any(Shipment.class));
         }
     }
 
@@ -251,23 +344,49 @@ class ShipmentServiceTest {
         @Test
         @DisplayName("Deve deletar shipment existente")
         void deveDeletarShipmentExistente() {
-            when(shipmentRepository.existsById(shipment.getId())).thenReturn(true);
+            when(shipmentRepository.findByIdAndTenantId(shipment.getId(), tenant.getId())).thenReturn(Optional.of(shipment));
 
-            shipmentService.delete(shipment.getId());
+            shipmentService.delete(shipment.getId(), tenant.getId(), null);
 
-            verify(shipmentRepository).deleteById(shipment.getId());
+            verify(shipmentRepository).delete(shipment);
         }
 
         @Test
         @DisplayName("Deve lancar ResourceNotFoundException quando shipment nao existe")
         void deveLancarExcecaoQuandoNaoExiste() {
             UUID id = UUID.randomUUID();
-            when(shipmentRepository.existsById(id)).thenReturn(false);
+            when(shipmentRepository.findByIdAndTenantId(id, tenant.getId())).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> shipmentService.delete(id))
+            assertThatThrownBy(() -> shipmentService.delete(id, tenant.getId(), null))
                     .isInstanceOf(ResourceNotFoundException.class);
 
-            verify(shipmentRepository, never()).deleteById(any());
+            verify(shipmentRepository, never()).delete(any(Shipment.class));
+        }
+
+        @Test
+        @DisplayName("Nao deve deletar shipment de outro tenant")
+        void naoDeveDeletarShipmentDeOutroTenant() {
+            when(shipmentRepository.findByIdAndTenantId(shipment.getId(), tenant.getId())).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> shipmentService.delete(shipment.getId(), tenant.getId(), null))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+
+            verify(shipmentRepository, never()).delete(any(Shipment.class));
+        }
+
+        @Test
+        @DisplayName("CLIENT nao deve deletar shipment de outro customer no mesmo tenant")
+        void clientNaoDeveDeletarShipmentDeOutroCustomer() {
+            UUID customerId = UUID.randomUUID();
+            when(shipmentRepository.findByIdAndTenantIdAndCustomerId(shipment.getId(), tenant.getId(), customerId))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> shipmentService.delete(shipment.getId(), tenant.getId(), customerId))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Shipment");
+
+            verify(shipmentRepository, never()).delete(any(Shipment.class));
         }
     }
 

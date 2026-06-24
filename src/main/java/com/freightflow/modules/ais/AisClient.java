@@ -3,6 +3,7 @@ package com.freightflow.modules.ais;
 import com.freightflow.modules.ais.dto.AisPositionResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -10,33 +11,25 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Client for Marine Digital AIS API.
  * Fetches real-time vessel positions by IMO number.
  *
- * Cache in-memory com TTL de 55s: quando o frontend faz refresh a cada 60s
- * o cache já expirou e a API AIS é consultada de verdade a cada ciclo.
- * Em produção com Redis, substituir por RedisCacheManager com TTL configurado.
+ * Results are cached in Redis under the "ais-positions" cache.
+ * TTL is configurable via freightflow.cache.ais-ttl-minutes (default 5 minutes).
+ * Null results (API failures) are never cached, so the next call retries immediately.
+ *
+ * Fallback chain (handled by VesselPositionResolver, not here):
+ *   Live AIS → midpoint estimate → UNAVAILABLE
  */
 @Component
 public class AisClient {
 
     private static final Logger log = LoggerFactory.getLogger(AisClient.class);
     private static final String AIS_BASE_URL = "https://api.marine.digital/v1/ais/vessel/";
-    private static final long CACHE_TTL_SECONDS = 55;
 
     private final RestTemplate restTemplate;
-
-    /** Cache in-memory: IMO → (posição, expiresAt) */
-    private final ConcurrentHashMap<String, CachedEntry> positionCache = new ConcurrentHashMap<>();
-
-    private record CachedEntry(AisPositionResponse position, Instant expiresAt) {
-        boolean isExpired() {
-            return Instant.now().isAfter(expiresAt);
-        }
-    }
 
     public AisClient() {
         var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
@@ -47,38 +40,22 @@ public class AisClient {
 
     /**
      * Fetch AIS position for a vessel by IMO number.
-     * Cached in-memory with TTL of 55s.
-     * Returns null on any failure (graceful degradation).
+     *
+     * Cached in Redis with the TTL configured for "ais-positions".
+     * Returns null on any failure (graceful degradation); null results are NOT cached
+     * so that a transient API failure does not freeze position data.
+     *
+     * @param imo vessel IMO number (e.g. "9321483")
+     * @return live position, or null if the AIS API is unreachable / returns no data
      */
+    @Cacheable(value = "ais-positions", key = "#imo", unless = "#result == null")
     public AisPositionResponse getPosition(String imo) {
-        // Check cache first
-        CachedEntry cached = positionCache.get(imo);
-        if (cached != null && !cached.isExpired()) {
-            log.debug("AIS cache hit for IMO {} (expires in {}s)",
-                    imo, Duration.between(Instant.now(), cached.expiresAt()).toSeconds());
-            return cached.position().asCached();
-        }
-
-        // Cache miss or expired — fetch from API
-        AisPositionResponse result = fetchFromApi(imo);
-
-        if (result != null) {
-            positionCache.put(imo, new CachedEntry(
-                    result,
-                    Instant.now().plusSeconds(CACHE_TTL_SECONDS)
-            ));
-            log.info("AIS position cached for IMO {} (TTL {}s)", imo, CACHE_TTL_SECONDS);
-        } else {
-            // Remove stale entry so next call retries immediately
-            positionCache.remove(imo);
-        }
-
-        return result;
+        log.info("AIS cache miss — fetching from API for IMO {}", imo);
+        return fetchFromApi(imo);
     }
 
     private AisPositionResponse fetchFromApi(String imo) {
         try {
-            log.info("Fetching AIS position from API for IMO {}", imo);
             @SuppressWarnings("rawtypes")
             ResponseEntity<Map> response = restTemplate.getForEntity(
                     AIS_BASE_URL + imo, Map.class
@@ -134,7 +111,9 @@ public class AisClient {
                 timestamp = Instant.now();
             }
 
-            return AisPositionResponse.live(imo, lat, lon, speed, course, status, timestamp);
+            AisPositionResponse result = AisPositionResponse.live(imo, lat, lon, speed, course, status, timestamp);
+            log.info("AIS position fetched for IMO {} — storing in cache", imo);
+            return result;
         } catch (Exception e) {
             log.warn("Failed to parse AIS response for IMO {}: {}", imo, e.getMessage());
             return null;

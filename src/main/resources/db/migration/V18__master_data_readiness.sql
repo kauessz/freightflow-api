@@ -1,0 +1,33 @@
+ALTER TABLE ports
+    ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW();
+
+ALTER TABLE ports
+    ALTER COLUMN latitude DROP NOT NULL,
+    ALTER COLUMN longitude DROP NOT NULL;
+
+UPDATE ports
+SET updated_at = created_at
+WHERE updated_at IS NULL;
+
+ALTER TABLE vessels
+    ADD COLUMN carrier VARCHAR(100),
+    ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE vessels
+    ALTER COLUMN imo DROP NOT NULL;
+
+UPDATE vessels
+SET carrier = CASE
+    WHEN UPPER(name) LIKE '%CMA CGM%' THEN 'CMA CGM'
+    WHEN UPPER(name) LIKE '%HMM%' THEN 'HMM'
+    WHEN UPPER(name) LIKE '%LOG IN%' OR UPPER(name) LIKE '%LOG-IN%' THEN 'Log-In'
+    WHEN UPPER(name) LIKE '%MAERSK%' OR UPPER(name) LIKE '%SAN NICOLAS%' THEN 'Maersk'
+    WHEN UPPER(name) LIKE '%MSC%' THEN 'MSC'
+    WHEN UPPER(name) LIKE 'ONE%' OR UPPER(name) LIKE '% ONE %' THEN 'ONE'
+    ELSE 'Other'
+END
+WHERE carrier IS NULL;
+
+ALTER TABLE voyages
+    ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;

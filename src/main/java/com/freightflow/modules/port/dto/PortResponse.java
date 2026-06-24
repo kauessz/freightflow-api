@@ -11,7 +11,8 @@ public record PortResponse(
     String country,
     String timezone,
     Double latitude,
-    Double longitude
+    Double longitude,
+    boolean active
 ) {
     public static PortResponse from(Port port) {
         return new PortResponse(
@@ -21,7 +22,8 @@ public record PortResponse(
             port.getCountry(),
             port.getTimezone(),
             port.getLatitude(),
-            port.getLongitude()
+            port.getLongitude(),
+            port.isActive()
         );
     }
 }

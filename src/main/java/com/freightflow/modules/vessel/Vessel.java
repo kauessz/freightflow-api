@@ -15,7 +15,7 @@ public class Vessel {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 7)
+    @Column(unique = true, length = 7)
     private String imo;
 
     @Column(nullable = false)
@@ -30,6 +30,12 @@ public class Vessel {
 
     @Column(nullable = false)
     private Integer capacityTeu;
+
+    @Column(length = 100)
+    private String carrier;
+
+    @Column(nullable = false)
+    private boolean active;
 
     @OneToMany(mappedBy = "vessel", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Voyage> voyages = new ArrayList<>();
@@ -48,6 +54,7 @@ public class Vessel {
         this.flag = flag;
         this.type = type;
         this.capacityTeu = capacityTeu;
+        this.active = true;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
@@ -66,6 +73,11 @@ public class Vessel {
 
     public void setName(String name) {
         this.name = name;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setImo(String imo) {
+        this.imo = imo;
         this.updatedAt = Instant.now();
     }
 
@@ -98,6 +110,24 @@ public class Vessel {
 
     public List<Voyage> getVoyages() {
         return voyages;
+    }
+
+    public String getCarrier() {
+        return carrier;
+    }
+
+    public void setCarrier(String carrier) {
+        this.carrier = carrier;
+        this.updatedAt = Instant.now();
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+        this.updatedAt = Instant.now();
     }
 
     public Instant getCreatedAt() {

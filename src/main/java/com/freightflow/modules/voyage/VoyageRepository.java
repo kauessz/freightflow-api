@@ -19,6 +19,8 @@ public interface VoyageRepository extends JpaRepository<Voyage, UUID> {
 
     boolean existsByVoyageNumber(String voyageNumber);
 
+    boolean existsByVoyageNumberAndIdNot(String voyageNumber, UUID id);
+
     @Query("""
         SELECT v FROM Voyage v
         JOIN FETCH v.vessel

@@ -62,8 +62,10 @@ public record ShipmentResponse(
         String tsPortName = s.getTransshipmentPort() != null ? s.getTransshipmentPort().getName() : null;
         String tsPortCode = s.getTransshipmentPort() != null ? s.getTransshipmentPort().getUnlocode() : null;
         String vesselName = s.getVoyage().getVessel().getName();
-        // Derive carrier from vessel name prefix
-        String carrier = deriveCarrier(vesselName);
+        String explicitCarrier = s.getVoyage().getVessel().getCarrier();
+        String carrier = (explicitCarrier != null && !explicitCarrier.isBlank())
+                ? explicitCarrier
+                : deriveCarrier(vesselName);
 
         return new ShipmentResponse(
             s.getId(),

@@ -17,6 +17,13 @@ import java.lang.reflect.Field;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+/**
+ * Unit tests for VesselPositionResolver resolution logic.
+ *
+ * AisClient is mocked — cache behaviour (Redis TTL, Spring @Cacheable) is
+ * the responsibility of Spring's caching infrastructure and is not tested here.
+ * Integration tests that require a real cache layer should use Testcontainers.
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("VesselPositionResolver")
 class VesselPositionResolverTest {
@@ -28,7 +35,7 @@ class VesselPositionResolverTest {
     private VesselPositionResolver vesselPositionResolver;
 
     @Test
-    @DisplayName("should_returnEstimated_when_aisFailsAndPortsHaveCoordinates")
+    @DisplayName("should return ESTIMATED when AIS returns null and both ports have coordinates")
     void should_returnEstimated_when_aisFailsAndPortsHaveCoordinates() {
         Voyage voyage = TestDataFactory.voyage();
         when(aisClient.getPosition(voyage.getVessel().getImo())).thenReturn(null);
@@ -41,10 +48,11 @@ class VesselPositionResolverTest {
     }
 
     @Test
-    @DisplayName("should_returnUnavailable_when_aisFailsAndPortsCannotEstimate")
+    @DisplayName("should return UNAVAILABLE when AIS returns null and origin port has no coordinates")
     void should_returnUnavailable_when_aisFailsAndPortsCannotEstimate() throws Exception {
         Voyage voyage = TestDataFactory.voyage();
-        Port originWithoutCoordinates = TestDataFactory.port(TestDataFactory.defaultPortOriginId(), "BRSSZ", "Santos", "BR");
+        Port originWithoutCoordinates = TestDataFactory.port(
+                TestDataFactory.defaultPortOriginId(), "BRSSZ", "Santos", "BR");
         setField(originWithoutCoordinates, "latitude", null);
         setField(originWithoutCoordinates, "longitude", null);
         setField(voyage, "originPort", originWithoutCoordinates);
@@ -56,6 +64,8 @@ class VesselPositionResolverTest {
         assertThat(result.positionSource()).isEqualTo(PositionSource.UNAVAILABLE);
         assertThat(result.hasCoordinates()).isFalse();
     }
+
+    // ── helpers ─────────────────────────────────────────────────────────────
 
     private void setField(Object target, String fieldName, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(fieldName);

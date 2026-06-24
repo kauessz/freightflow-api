@@ -16,6 +16,8 @@ public interface PortRepository extends JpaRepository<Port, UUID> {
 
     boolean existsByUnlocode(String unlocode);
 
+    boolean existsByUnlocodeAndIdNot(String unlocode, UUID id);
+
     List<Port> findByCountryOrderByName(String country);
 
     @Query("""

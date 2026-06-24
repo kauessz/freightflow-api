@@ -1,6 +1,7 @@
 package com.freightflow.modules.shipment;
 
 import com.freightflow.modules.shipment.dto.CreateShipmentRequest;
+import com.freightflow.modules.shipment.dto.ShipmentFilterParams;
 import com.freightflow.modules.shipment.dto.ShipmentResponse;
 import com.freightflow.modules.shipment.dto.ShipmentStatsResponse;
 import com.freightflow.modules.shipment.dto.UpdateShipmentRequest;
@@ -35,16 +36,41 @@ public class ShipmentController {
 
     @GetMapping
     @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
-    @Operation(summary = "List shipments", description = "Paginated list. CLIENT role sees only their customer's shipments.")
+    @Operation(
+        summary = "List shipments",
+        description = """
+            Paginated list with optional server-side filters.
+            CLIENT role sees only their customer's shipments.
+
+            Filters:
+            - booking: partial match (case-insensitive)
+            - status: exact match — enum name, e.g. IN_TRANSIT
+            - carrier: partial match on vessel carrier (case-insensitive)
+            - vesselName: partial match on vessel name (case-insensitive)
+            - originPortUnlocode: exact match on origin port UNLOCODE, e.g. BRSSZ
+            - riskLevel: exact match — LOW, MEDIUM, HIGH or CRITICAL
+            """
+    )
     public ResponseEntity<PageResponse<ShipmentResponse>> list(
             @AuthenticationPrincipal UserPrincipal user,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String booking,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String carrier,
+            @RequestParam(required = false) String vesselName,
+            @RequestParam(required = false) String originPortUnlocode,
+            @RequestParam(required = false) String riskLevel) {
+
         Pageable pageable = PageRequest.of(page, size);
+        ShipmentFilterParams filters = new ShipmentFilterParams(
+                booking, status, carrier, vesselName, originPortUnlocode, riskLevel);
+
         if ("CLIENT".equals(user.getRole()) && user.getCustomerId() != null) {
-            return ResponseEntity.ok(shipmentService.listForClient(user.getTenantId(), user.getCustomerId(), pageable));
+            return ResponseEntity.ok(
+                    shipmentService.listForClient(user.getTenantId(), user.getCustomerId(), filters, pageable));
         }
-        return ResponseEntity.ok(shipmentService.list(user.getTenantId(), pageable));
+        return ResponseEntity.ok(shipmentService.list(user.getTenantId(), filters, pageable));
     }
 
     @GetMapping("/stats")
@@ -62,7 +88,8 @@ public class ShipmentController {
     public ResponseEntity<ShipmentResponse> getById(
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal user) {
-        return ResponseEntity.ok(shipmentService.getById(id, user.getTenantId()));
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(shipmentService.getById(id, user.getTenantId(), customerId));
     }
 
     @PostMapping
@@ -80,15 +107,19 @@ public class ShipmentController {
     @Operation(summary = "Update an existing shipment")
     public ResponseEntity<ShipmentResponse> update(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateShipmentRequest request) {
-        return ResponseEntity.ok(shipmentService.update(id, request));
+            @Valid @RequestBody UpdateShipmentRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        return ResponseEntity.ok(shipmentService.update(id, request, user.getTenantId(), customerId));
     }
 
     @DeleteMapping("/{id}")
     @RequiresRole("ADMIN")
     @Operation(summary = "Delete a shipment")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        shipmentService.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable UUID id,
+                                       @AuthenticationPrincipal UserPrincipal user) {
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        shipmentService.delete(id, user.getTenantId(), customerId);
         return ResponseEntity.noContent().build();
     }
 }

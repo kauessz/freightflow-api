@@ -8,8 +8,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record CreateVesselRequest(
-    @NotBlank(message = "IMO number is required")
-    @Pattern(regexp = "^\\d{7}$", message = "IMO number must be exactly 7 digits")
+    @Pattern(regexp = "^$|^\\d{7}$", message = "IMO number must be exactly 7 digits when provided")
     String imo,
 
     @NotBlank(message = "Vessel name is required")
@@ -25,5 +24,10 @@ public record CreateVesselRequest(
 
     @NotNull(message = "Capacity TEU is required")
     @Positive(message = "Capacity TEU must be positive")
-    Integer capacityTeu
+    Integer capacityTeu,
+
+    @Size(max = 100, message = "Carrier must be at most 100 characters")
+    String carrier,
+
+    Boolean active
 ) {}

@@ -1,6 +1,7 @@
 package com.freightflow.modules.vessel;
 
 import com.freightflow.modules.vessel.dto.CreateVesselRequest;
+import com.freightflow.modules.vessel.dto.PositionTrackPoint;
 import com.freightflow.modules.vessel.dto.UpdateVesselRequest;
 import com.freightflow.modules.vessel.dto.VesselResponse;
 import com.freightflow.modules.vessel.dto.VesselWithVoyageResponse;
@@ -28,13 +29,17 @@ import java.util.UUID;
 @SecurityRequirement(name = "Bearer Authentication")
 public class VesselController {
 
-    private final VesselService vesselService;
+    private final VesselService          vesselService;
+    private final PositionHistoryService positionHistoryService;
 
-    public VesselController(VesselService vesselService) {
-        this.vesselService = vesselService;
+    public VesselController(VesselService vesselService,
+                            PositionHistoryService positionHistoryService) {
+        this.vesselService          = vesselService;
+        this.positionHistoryService = positionHistoryService;
     }
 
     @GetMapping
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER"})
     @Operation(summary = "List vessels", description = "Paginated list of vessels ordered by name")
     public ResponseEntity<PageResponse<VesselResponse>> list(
             @RequestParam(defaultValue = "0") int page,
@@ -44,12 +49,14 @@ public class VesselController {
     }
 
     @GetMapping("/{id}")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER"})
     @Operation(summary = "Get vessel by ID")
     public ResponseEntity<VesselResponse> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(vesselService.getById(id));
     }
 
     @GetMapping("/imo/{imo}")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER"})
     @Operation(summary = "Get vessel by IMO number")
     public ResponseEntity<VesselResponse> getByImo(@PathVariable String imo) {
         return ResponseEntity.ok(vesselService.getByImo(imo));
@@ -67,7 +74,33 @@ public class VesselController {
         return ResponseEntity.ok(vesselService.getActiveWithShipments(user.getTenantId(), customerId));
     }
 
+    /**
+     * GET /api/v1/vessels/{imo}/track?limit=50
+     *
+     * Returns the recorded AIS position history for a vessel, derived from
+     * POSITION_UPDATE events stored by the PositionTrackingJob.
+     * Points are ordered by event time descending (most recent first).
+     *
+     * Useful for rendering a breadcrumb trail on a map.
+     * Returns an empty list if no POSITION_UPDATE events exist yet.
+     */
+    @GetMapping("/imo/{imo}/track")
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER"})
+    @Operation(
+            summary = "Vessel position track history",
+            description = "Returns up to {limit} AIS position snapshots for the vessel's active shipments, " +
+                          "ordered by event time descending. Maximum 200 points. " +
+                          "Points are recorded every 5 minutes by the background tracking job."
+    )
+    public ResponseEntity<List<PositionTrackPoint>> getTrack(
+            @PathVariable String imo,
+            @RequestParam(defaultValue = "50") int limit) {
+        List<PositionTrackPoint> track = positionHistoryService.getPositionHistory(imo, limit);
+        return ResponseEntity.ok(track);
+    }
+
     @PostMapping
+    @RequiresRole({"ADMIN", "OPERATOR"})
     @Operation(summary = "Register a new vessel")
     public ResponseEntity<VesselResponse> create(@Valid @RequestBody CreateVesselRequest request) {
         VesselResponse response = vesselService.create(request);
@@ -75,6 +108,7 @@ public class VesselController {
     }
 
     @PutMapping("/{id}")
+    @RequiresRole({"ADMIN", "OPERATOR"})
     @Operation(summary = "Update vessel details")
     public ResponseEntity<VesselResponse> update(
             @PathVariable UUID id,
@@ -83,6 +117,7 @@ public class VesselController {
     }
 
     @DeleteMapping("/{id}")
+    @RequiresRole("ADMIN")
     @Operation(summary = "Delete a vessel", description = "Only allowed if vessel has no voyages")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         vesselService.delete(id);

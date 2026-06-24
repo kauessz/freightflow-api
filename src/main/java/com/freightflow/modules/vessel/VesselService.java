@@ -8,7 +8,9 @@ import com.freightflow.modules.vessel.dto.UpdateVesselRequest;
 import com.freightflow.modules.vessel.dto.VesselResponse;
 import com.freightflow.modules.vessel.dto.VesselWithVoyageResponse;
 import com.freightflow.modules.voyage.Voyage;
+import com.freightflow.modules.voyage.VoyageFleetMapEligibilityService;
 import com.freightflow.modules.voyage.VoyageRepository;
+import com.freightflow.modules.voyage.dto.FleetMapIneligibilityReason;
 import com.freightflow.modules.voyage.enums.VoyageStatus;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
@@ -34,15 +36,18 @@ public class VesselService {
     private final VoyageRepository    voyageRepository;
     private final ShipmentRepository  shipmentRepository;
     private final VesselPositionResolver vesselPositionResolver;
+    private final VoyageFleetMapEligibilityService voyageFleetMapEligibilityService;
 
     public VesselService(VesselRepository vesselRepository,
                          VoyageRepository voyageRepository,
                          ShipmentRepository shipmentRepository,
-                         VesselPositionResolver vesselPositionResolver) {
+                         VesselPositionResolver vesselPositionResolver,
+                         VoyageFleetMapEligibilityService voyageFleetMapEligibilityService) {
         this.vesselRepository   = vesselRepository;
         this.voyageRepository   = voyageRepository;
         this.shipmentRepository = shipmentRepository;
         this.vesselPositionResolver = vesselPositionResolver;
+        this.voyageFleetMapEligibilityService = voyageFleetMapEligibilityService;
     }
 
     public PageResponse<VesselResponse> list(Pageable pageable) {
@@ -95,22 +100,34 @@ public class VesselService {
         return voyages.stream().map(voyage -> {
             AisPositionResponse pos = vesselPositionResolver.resolveForVoyage(voyage, true);
             int shipmentCount = shipmentCounts.getOrDefault(voyage.getId(), 0);
-            return VesselWithVoyageResponse.from(voyage, pos, shipmentCount);
-        }).toList();
+            var eligibility = voyageFleetMapEligibilityService.evaluate(voyage, shipmentCount);
+            return VesselWithVoyageResponse.from(
+                    voyage,
+                    pos,
+                    shipmentCount,
+                    eligibility.eligibleForFleetMap(),
+                    eligibility.ineligibilityReasons()
+            );
+        }).filter(VesselWithVoyageResponse::eligibleForFleetMap).toList();
     }
 
     @Transactional
     public VesselResponse create(CreateVesselRequest request) {
-        log.info("Creating vessel imo={}", request.imo());
+        String imo = normalizeImo(request.imo());
+        log.info("Creating vessel imo={}", imo);
 
-        if (vesselRepository.existsByImo(request.imo())) {
-            throw new BusinessException("Vessel with IMO " + request.imo() + " already exists");
+        if (imo != null && vesselRepository.existsByImo(imo)) {
+            throw new BusinessException("Vessel with IMO " + imo + " already exists");
         }
 
         Vessel vessel = new Vessel(
-                request.imo(), request.name(), request.flag(),
+                imo, request.name(), request.flag(),
                 request.type(), request.capacityTeu()
         );
+        vessel.setCarrier(request.carrier());
+        if (request.active() != null) {
+            vessel.setActive(request.active());
+        }
 
         Vessel saved = vesselRepository.save(vessel);
         log.info("Vessel created: id={}, imo={}, name={}", saved.getId(), saved.getImo(), saved.getName());
@@ -123,10 +140,19 @@ public class VesselService {
         Vessel vessel = vesselRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Vessel", id));
 
+        if (request.imo() != null) {
+            String imo = normalizeImo(request.imo());
+            if (imo != null && vesselRepository.existsByImoAndIdNot(imo, id)) {
+                throw new BusinessException("Vessel with IMO " + imo + " already exists");
+            }
+            vessel.setImo(imo);
+        }
         if (request.name() != null) vessel.setName(request.name());
         if (request.flag() != null) vessel.setFlag(request.flag());
         if (request.type() != null) vessel.setType(request.type());
         if (request.capacityTeu() != null) vessel.setCapacityTeu(request.capacityTeu());
+        if (request.carrier() != null) vessel.setCarrier(request.carrier());
+        if (request.active() != null) vessel.setActive(request.active());
 
         Vessel saved = vesselRepository.save(vessel);
         return VesselResponse.from(saved);
@@ -143,5 +169,11 @@ public class VesselService {
         }
 
         vesselRepository.delete(vessel);
+    }
+
+    private String normalizeImo(String imo) {
+        if (imo == null) return null;
+        String normalized = imo.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

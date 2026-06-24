@@ -10,7 +10,9 @@ import com.freightflow.modules.vessel.dto.VesselResponse;
 import com.freightflow.modules.vessel.dto.VesselWithVoyageResponse;
 import com.freightflow.modules.vessel.enums.VesselType;
 import com.freightflow.modules.voyage.Voyage;
+import com.freightflow.modules.voyage.VoyageFleetMapEligibilityService;
 import com.freightflow.modules.voyage.VoyageRepository;
+import com.freightflow.modules.voyage.dto.FleetMapIneligibilityReason;
 import com.freightflow.modules.voyage.enums.VoyageStatus;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
@@ -49,6 +51,8 @@ class VesselServiceTest {
     private ShipmentRepository shipmentRepository;
     @Mock
     private VesselPositionResolver vesselPositionResolver;
+    @Mock
+    private VoyageFleetMapEligibilityService voyageFleetMapEligibilityService;
 
     @InjectMocks
     private VesselService vesselService;
@@ -136,6 +140,8 @@ class VesselServiceTest {
             when(shipmentRepository.countByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
                     .thenReturn(List.of(countView(voyage.getId(), 2L)));
             when(vesselPositionResolver.resolveForVoyage(voyage, true)).thenReturn(position);
+            when(voyageFleetMapEligibilityService.evaluate(voyage, 2))
+                    .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(true, List.of()));
 
             List<VesselWithVoyageResponse> result = vesselService.getActiveWithShipments(tenantId, null);
 
@@ -158,6 +164,8 @@ class VesselServiceTest {
             when(shipmentRepository.countByVoyageIdsAndTenantIdAndCustomerId(List.of(voyage.getId()), tenantId, customerId))
                     .thenReturn(List.of(countView(voyage.getId(), 1L)));
             when(vesselPositionResolver.resolveForVoyage(voyage, true)).thenReturn(position);
+            when(voyageFleetMapEligibilityService.evaluate(voyage, 1))
+                    .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(true, List.of()));
 
             List<VesselWithVoyageResponse> result = vesselService.getActiveWithShipments(tenantId, customerId);
 
@@ -166,6 +174,37 @@ class VesselServiceTest {
             assertThat(result.get(0).positionSource()).isEqualTo(PositionSource.UNAVAILABLE);
             verify(voyageRepository).findActiveVoyagesWithCustomerShipments(
                     tenantId, customerId, List.of(VoyageStatus.IN_TRANSIT, VoyageStatus.DEPARTED));
+        }
+
+        @Test
+        @DisplayName("should_skipIneligibleVoyage_when_readinessFails")
+        void should_skipIneligibleVoyage_when_readinessFails() {
+            UUID tenantId = TestDataFactory.defaultTenantId();
+
+            when(voyageRepository.findActiveVoyagesWithTenantShipments(
+                    tenantId, List.of(VoyageStatus.IN_TRANSIT, VoyageStatus.DEPARTED)))
+                    .thenReturn(List.of(voyage));
+            when(shipmentRepository.countByVoyageIdsAndTenantId(List.of(voyage.getId()), tenantId))
+                    .thenReturn(List.of(countView(voyage.getId(), 1L)));
+            when(vesselPositionResolver.resolveForVoyage(voyage, true))
+                    .thenReturn(AisPositionResponse.live(
+                            voyage.getVessel().getImo(),
+                            -10.0,
+                            -20.0,
+                            null,
+                            null,
+                            "under_way",
+                            java.time.Instant.now()
+                    ));
+            when(voyageFleetMapEligibilityService.evaluate(voyage, 1))
+                    .thenReturn(new VoyageFleetMapEligibilityService.EligibilityResult(
+                            false,
+                            List.of(FleetMapIneligibilityReason.MISSING_IMO)
+                    ));
+
+            List<VesselWithVoyageResponse> result = vesselService.getActiveWithShipments(tenantId, null);
+
+            assertThat(result).isEmpty();
         }
     }
 
@@ -181,7 +220,7 @@ class VesselServiceTest {
             // Arrange
             String existingImo = vessel.getImo();
             CreateVesselRequest request = new CreateVesselRequest(
-                    existingImo, "Another Vessel", "BR", VesselType.CONTAINER, 5000);
+                    existingImo, "Another Vessel", "BR", VesselType.CONTAINER, 5000, null, null);
             when(vesselRepository.existsByImo(existingImo)).thenReturn(true);
 
             // Act & Assert
@@ -195,8 +234,9 @@ class VesselServiceTest {
         void should_persistAndReturnVessel_when_imoIsUnique() {
             // Arrange
             CreateVesselRequest request = new CreateVesselRequest(
-                    "9321483", "CAP SAN MARCO", "DE", VesselType.CONTAINER, 9814);
+                    "9321483", "CAP SAN MARCO", "DE", VesselType.CONTAINER, 9814, "Hamburg Sud", true);
             Vessel saved = TestDataFactory.vessel(UUID.randomUUID(), "9321483", "CAP SAN MARCO");
+            saved.setCarrier("Hamburg Sud");
             when(vesselRepository.existsByImo("9321483")).thenReturn(false);
             when(vesselRepository.save(any(Vessel.class))).thenReturn(saved);
 
@@ -205,6 +245,7 @@ class VesselServiceTest {
 
             // Assert
             assertThat(result.imo()).isEqualTo("9321483");
+            assertThat(result.carrier()).isEqualTo("Hamburg Sud");
             verify(vesselRepository).save(any(Vessel.class));
         }
     }

@@ -1,6 +1,8 @@
 package com.freightflow.modules.port;
 
+import com.freightflow.modules.port.dto.CreatePortRequest;
 import com.freightflow.modules.port.dto.PortResponse;
+import com.freightflow.modules.port.dto.UpdatePortRequest;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
 import com.freightflow.shared.pagination.PageResponse;
@@ -68,5 +70,51 @@ public class PortService {
                 .stream()
                 .map(PortResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public PortResponse create(CreatePortRequest request) {
+        String unlocode = request.unlocode().toUpperCase();
+        if (portRepository.existsByUnlocode(unlocode)) {
+            throw new BusinessException("Port with UNLOCODE " + unlocode + " already exists");
+        }
+
+        Port port = new Port(
+                unlocode,
+                request.name(),
+                request.country().toUpperCase(),
+                request.timezone(),
+                request.latitude(),
+                request.longitude()
+        );
+        if (request.active() != null) {
+            port.setActive(request.active());
+        }
+
+        return PortResponse.from(portRepository.save(port));
+    }
+
+    @Transactional
+    public PortResponse update(UUID id, UpdatePortRequest request) {
+        Port port = portRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Port", id));
+
+        if (request.unlocode() != null) {
+            String unlocode = request.unlocode().toUpperCase();
+            if (portRepository.existsByUnlocodeAndIdNot(unlocode, id)) {
+                throw new BusinessException("Port with UNLOCODE " + unlocode + " already exists");
+            }
+            port.setUnlocode(unlocode);
+        }
+        if (request.name() != null) port.setName(request.name());
+        if (request.country() != null) port.setCountry(request.country().toUpperCase());
+        if (request.timezone() != null) port.setTimezone(request.timezone());
+        if (request.latitude() != null || request.longitude() != null) {
+            port.setLatitude(request.latitude());
+            port.setLongitude(request.longitude());
+        }
+        if (request.active() != null) port.setActive(request.active());
+
+        return PortResponse.from(portRepository.save(port));
     }
 }
