@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -162,16 +163,19 @@ public class PositionTrackingJob {
         }
 
         try {
-            String[] parts = lastEvent.get().getLocation().split(",", 2);
-            if (parts.length < 2) return true;
+            var previousCoordinates = PositionCoordinates.parseStoredLocation(lastEvent.get().getLocation());
+            if (previousCoordinates.isEmpty()) {
+                log.warn("Could not parse previous position for shipment={}: {}", shipment.getId(), lastEvent.get().getLocation());
+                return true;
+            }
 
-            double prevLat = Double.parseDouble(parts[0].trim());
-            double prevLon = Double.parseDouble(parts[1].trim());
+            double prevLat = previousCoordinates.get().latitude();
+            double prevLon = previousCoordinates.get().longitude();
 
             return Math.abs(current.latitude() - prevLat) > MOVEMENT_THRESHOLD_DEG
                 || Math.abs(current.longitude() - prevLon) > MOVEMENT_THRESHOLD_DEG;
 
-        } catch (NumberFormatException ex) {
+        } catch (RuntimeException ex) {
             // Malformed previous location — record new event to repair the track
             log.warn("Could not parse previous position for shipment={}: {}", shipment.getId(), ex.getMessage());
             return true;
@@ -183,7 +187,7 @@ public class PositionTrackingJob {
      * with 6 decimal places (≈ 11 cm precision).
      */
     private String formatLocation(double lat, double lon) {
-        return String.format("%.6f,%.6f", lat, lon);
+        return String.format(Locale.US, "%.6f,%.6f", lat, lon);
     }
 
     /**

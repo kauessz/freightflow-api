@@ -1,5 +1,6 @@
 package com.freightflow.modules.vessel;
 
+import com.freightflow.modules.ais.PositionCoordinates;
 import com.freightflow.modules.event.Event;
 import com.freightflow.modules.event.enums.EventType;
 import com.freightflow.modules.shipment.enums.ShipmentStatus;
@@ -93,11 +94,13 @@ public class PositionHistoryService {
      */
     private PositionTrackPoint parseTrackPoint(Event event, UUID voyageId) {
         try {
-            String[] coords = event.getLocation().split(",", 2);
-            if (coords.length < 2) return null;
+            var coordinates = PositionCoordinates.parseStoredLocation(event.getLocation());
+            if (coordinates.isEmpty()) {
+                return null;
+            }
 
-            double lat = Double.parseDouble(coords[0].trim());
-            double lon = Double.parseDouble(coords[1].trim());
+            double lat = coordinates.get().latitude();
+            double lon = coordinates.get().longitude();
 
             Double speed = extractSpeed(event.getDescription());
 

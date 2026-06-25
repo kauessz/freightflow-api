@@ -21,7 +21,7 @@ import java.util.Map;
  * Null results (API failures) are never cached, so the next call retries immediately.
  *
  * Fallback chain (handled by VesselPositionResolver, not here):
- *   Live AIS → midpoint estimate → UNAVAILABLE
+ *   Live AIS → conservative estimated anchor → UNAVAILABLE
  */
 @Component
 public class AisClient {
@@ -50,6 +50,9 @@ public class AisClient {
      */
     @Cacheable(value = "ais-positions", key = "#imo", unless = "#result == null")
     public AisPositionResponse getPosition(String imo) {
+        if (imo == null || imo.isBlank()) {
+            return null;
+        }
         log.info("AIS cache miss — fetching from API for IMO {}", imo);
         return fetchFromApi(imo);
     }
@@ -78,22 +81,23 @@ public class AisClient {
     @SuppressWarnings("unchecked")
     private AisPositionResponse parsePosition(String imo, Map<String, Object> body) {
         try {
-            Double lat = toDouble(body.get("lat"));
-            Double lon = toDouble(body.get("lon"));
+            var coordinates = PositionCoordinates.parseProviderCoordinates(body.get("lat"), body.get("lon"));
 
-            if (lat == null || lon == null) {
+            if (coordinates.isEmpty()) {
                 // Try nested data structure
                 Map<String, Object> data = (Map<String, Object>) body.get("data");
                 if (data != null) {
-                    lat = toDouble(data.get("lat"));
-                    lon = toDouble(data.get("lon"));
+                    coordinates = PositionCoordinates.parseProviderCoordinates(data.get("lat"), data.get("lon"));
                 }
             }
 
-            if (lat == null || lon == null) {
-                log.warn("AIS response for IMO {} has no lat/lon", imo);
+            if (coordinates.isEmpty()) {
+                log.warn("AIS response for IMO {} has invalid or missing lat/lon", imo);
                 return null;
             }
+
+            double lat = coordinates.get().latitude();
+            double lon = coordinates.get().longitude();
 
             Double speed = toDouble(body.getOrDefault("speed", body.get("sog")));
             Double course = toDouble(body.getOrDefault("course", body.get("cog")));

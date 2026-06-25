@@ -171,6 +171,35 @@ class PositionTrackingJobTest {
                     event -> event.getType() == EventType.POSITION_UPDATE
             ));
         }
+
+        @Test
+        @DisplayName("Deve criar evento quando posicao anterior esta mal formatada")
+        void deveCriarEvento_quandoPosicaoAnteriorMalFormatada() {
+            UUID voyageId = UUID.randomUUID();
+            Voyage voyage = voyageWithShipment(voyageId);
+            Shipment shipment = voyage.getShipments().get(0);
+
+            Event malformedPreviousEvent = new Event(
+                    shipment,
+                    EventType.POSITION_UPDATE,
+                    "563150,41,362250",
+                    "Position update — 14.0 kn, heading 270° (LIVE)",
+                    Instant.now().minusSeconds(300)
+            );
+
+            mockEntityManagerToReturn(List.of(voyage));
+            when(vesselPositionResolver.resolveForVoyage(voyage))
+                    .thenReturn(liveAt(-22.5, -43.2));
+            when(eventRepository.findByShipmentIdOrderByOccurredAtDesc(shipment.getId()))
+                    .thenReturn(List.of(malformedPreviousEvent));
+            when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            job.trackActiveVoyages();
+
+            verify(eventRepository, times(1)).save(argThat(
+                    event -> event.getType() == EventType.POSITION_UPDATE
+            ));
+        }
     }
 
     @Nested

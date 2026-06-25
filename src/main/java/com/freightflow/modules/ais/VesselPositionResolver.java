@@ -1,6 +1,7 @@
 package com.freightflow.modules.ais;
 
 import com.freightflow.modules.ais.dto.AisPositionResponse;
+import com.freightflow.modules.port.Port;
 import com.freightflow.modules.voyage.Voyage;
 import org.springframework.stereotype.Component;
 
@@ -29,26 +30,27 @@ public class VesselPositionResolver {
             return position;
         }
 
-        if (allowEstimatedFallback && hasSafeEstimateBase(voyage)) {
-            return AisPositionResponse.estimated(
-                    midpoint(voyage.getOriginPort().getLatitude(), voyage.getDestinationPort().getLatitude()),
-                    midpoint(voyage.getOriginPort().getLongitude(), voyage.getDestinationPort().getLongitude())
-            );
+        if (allowEstimatedFallback) {
+            AisPositionResponse estimatedPosition = estimateFromVoyageContext(voyage);
+            if (estimatedPosition != null) {
+                return estimatedPosition;
+            }
         }
 
         return AisPositionResponse.unavailable(imo);
     }
 
-    private boolean hasSafeEstimateBase(Voyage voyage) {
-        return voyage.getOriginPort() != null
-                && voyage.getDestinationPort() != null
-                && voyage.getOriginPort().getLatitude() != null
-                && voyage.getOriginPort().getLongitude() != null
-                && voyage.getDestinationPort().getLatitude() != null
-                && voyage.getDestinationPort().getLongitude() != null;
-    }
+    private AisPositionResponse estimateFromVoyageContext(Voyage voyage) {
+        Port anchorPort = switch (voyage.getStatus()) {
+            case ARRIVED, COMPLETED -> voyage.getDestinationPort();
+            case CANCELLED -> null;
+            case SCHEDULED, DEPARTED, IN_TRANSIT -> voyage.getOriginPort();
+        };
 
-    private double midpoint(Double a, Double b) {
-        return (a + b) / 2.0;
+        if (anchorPort == null || !PositionCoordinates.isValid(anchorPort.getLatitude(), anchorPort.getLongitude())) {
+            return null;
+        }
+
+        return AisPositionResponse.estimated(anchorPort.getLatitude(), anchorPort.getLongitude());
     }
 }
