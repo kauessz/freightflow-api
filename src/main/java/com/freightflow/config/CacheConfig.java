@@ -25,12 +25,12 @@ import java.util.Map;
 /**
  * Cache configuration.
  *
- * Non-test profiles: RedisCacheManager with per-cache TTLs.
+ * Non-test/non-dev profiles: RedisCacheManager with per-cache TTLs.
  *   - "ais-positions"       : configurable via freightflow.cache.ais-ttl-minutes (default 5)
  *   - "vessel-data"         : fixed 30 minutes
  *   - "analytics-dashboard" : fixed 2 minutes (ops dashboard, delays, performance)
  *
- * Test profile: ConcurrentMapCacheManager — no Redis dependency needed for unit/integration tests.
+ * Dev/test profiles: ConcurrentMapCacheManager — no Redis dependency needed for local runs or tests.
  */
 @Configuration
 @EnableCaching
@@ -43,7 +43,7 @@ public class CacheConfig {
     // ── Redis cache (dev / railway / prod) ──────────────────────────────────
 
     @Bean
-    @Profile("!test")
+    @Profile("!test & !dev")
     public CacheManager redisCacheManager(RedisConnectionFactory connectionFactory) {
         ObjectMapper cacheMapper = buildCacheObjectMapper();
         GenericJackson2JsonRedisSerializer jsonSerializer =
@@ -87,7 +87,7 @@ public class CacheConfig {
     // ── In-process fallback (test profile only) ─────────────────────────────
 
     @Bean
-    @Profile("test")
+    @Profile({"test", "dev"})
     public CacheManager concurrentCacheManager() {
         // Unit tests mock AisClient directly, so no Redis infrastructure is needed.
         // Integration tests that need cache behaviour should spin up Redis via Testcontainers.
