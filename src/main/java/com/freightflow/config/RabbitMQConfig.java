@@ -10,6 +10,7 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -25,6 +26,7 @@ import org.springframework.context.annotation.Configuration;
  * AlertEvent records travel as JSON — no manual ObjectMapper required in consumers.
  */
 @Configuration
+@ConditionalOnProperty(prefix = "freightflow.messaging", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class RabbitMQConfig {
 
     // ── Topology constants (referenced by publisher and consumer) ───────────

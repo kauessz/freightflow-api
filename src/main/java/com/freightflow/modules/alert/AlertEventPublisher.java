@@ -4,6 +4,8 @@ import com.freightflow.config.RabbitMQConfig;
 import com.freightflow.modules.alert.dto.AlertEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
@@ -20,10 +22,13 @@ public class AlertEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(AlertEventPublisher.class);
 
-    private final RabbitTemplate rabbitTemplate;
+    private final ObjectProvider<RabbitTemplate> rabbitTemplateProvider;
+    private final boolean messagingEnabled;
 
-    public AlertEventPublisher(RabbitTemplate rabbitTemplate) {
-        this.rabbitTemplate = rabbitTemplate;
+    public AlertEventPublisher(ObjectProvider<RabbitTemplate> rabbitTemplateProvider,
+                               @Value("${freightflow.messaging.enabled:true}") boolean messagingEnabled) {
+        this.rabbitTemplateProvider = rabbitTemplateProvider;
+        this.messagingEnabled = messagingEnabled;
     }
 
     /**
@@ -32,6 +37,17 @@ public class AlertEventPublisher {
      * @param alert the newly saved alert (must have a non-null ID and shipment)
      */
     public void publishCriticalAlert(Alert alert) {
+        if (!messagingEnabled) {
+            log.debug("Messaging disabled — skipping RabbitMQ publish for alertId={}", alert.getId());
+            return;
+        }
+
+        RabbitTemplate rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
+        if (rabbitTemplate == null) {
+            throw new IllegalStateException(
+                    "RabbitTemplate not available while freightflow.messaging.enabled=true");
+        }
+
         AlertEvent event = new AlertEvent(
                 alert.getId(),
                 alert.getShipment().getId(),

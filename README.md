@@ -224,6 +224,8 @@ Document storage supports two local modes:
 
 - Mock storage (default for local dev): leave `STORAGE_ENDPOINT` unset or blank.
 - S3-compatible storage (Cloudflare R2 / MinIO): set `STORAGE_ENDPOINT` to a full `http://` or `https://` URL and provide bucket/credentials by env.
+- RabbitMQ messaging is optional in local dev by default: `FREIGHTFLOW_MESSAGING_ENABLED=false`.
+- To exercise real AMQP flows locally, start a broker and set `FREIGHTFLOW_MESSAGING_ENABLED=true`.
 
 Example using mock storage:
 
@@ -239,11 +241,13 @@ STORAGE_BUCKET=freightflow-docs
 STORAGE_ACCESS_KEY_ID=local-access-key
 STORAGE_SECRET_ACCESS_KEY=local-secret-key
 STORAGE_PUBLIC_BASE_URL=http://localhost:8080/mock-storage
+FREIGHTFLOW_MESSAGING_ENABLED=true
 
 mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
 If `STORAGE_ENDPOINT` is set, it must include the URI scheme. Values like `localhost:9000` or `r2.example.com` are rejected during startup to avoid ambiguous or broken storage wiring.
+When `FREIGHTFLOW_MESSAGING_ENABLED=false`, the API starts without RabbitMQ listeners and `/actuator/health` does not report Rabbit as `DOWN`.
 
 API will be available at: `http://localhost:8080`  
 Swagger UI: `http://localhost:8080/swagger-ui.html`

@@ -38,6 +38,9 @@ management:
     web:
       exposure:
         include: health,info,metrics
+  health:
+    rabbit:
+      enabled: true
   endpoint:
     health:
       # Em dev mostra detalhes; em prod (railway/prod) usa NEVER para não expor
@@ -72,6 +75,8 @@ freightflow:
   notification:
     from-email: ${NOTIFICATION_FROM_EMAIL:noreply@freightflow.com}
     from-name: "FreightFlow"
+  messaging:
+    enabled: ${FREIGHTFLOW_MESSAGING_ENABLED:true}
 
 ---
 spring:
@@ -100,11 +105,18 @@ spring:
     username: freightflow
     password: freightflow
 
+management:
+  health:
+    rabbit:
+      enabled: false
+
 freightflow:
   cache:
     ais-ttl-minutes: 5
   tracking:
     interval-ms: 300000  # 5 minutes
+  messaging:
+    enabled: ${FREIGHTFLOW_MESSAGING_ENABLED:false}
   storage:
     endpoint: ${STORAGE_ENDPOINT:}
     bucket: ${STORAGE_BUCKET:freightflow-docs}

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
  * caught and logged so they never poison the RabbitMQ message and trigger redelivery.
  */
 @Component
+@ConditionalOnProperty(prefix = "freightflow.messaging", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class AlertEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(AlertEventConsumer.class);
