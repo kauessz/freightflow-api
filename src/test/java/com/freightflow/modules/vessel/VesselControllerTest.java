@@ -177,10 +177,10 @@ class VesselControllerTest {
         @DisplayName("Deve retornar 200 com lista de pontos de posicao")
         void deveRetornar200ComListaDePontos() throws Exception {
             String imo = "9839012";
-            when(positionHistoryService.getPositionHistory(imo, 50))
+            when(positionHistoryService.getPositionHistory(imo, principal.getTenantId(), null, 50))
                     .thenReturn(List.of(samplePoint(), samplePoint()));
 
-            mockMvc.perform(get("/api/v1/vessels/imo/{imo}/track", imo)
+            mockMvc.perform(get("/api/v1/vessels/{imo}/track", imo)
                             .with(user(principal))
                             .param("limit", "50"))
                     .andExpect(status().isOk())
@@ -195,10 +195,10 @@ class VesselControllerTest {
         @DisplayName("Deve retornar 200 com lista vazia quando nao ha eventos de posicao")
         void deveRetornar200ListaVazia() throws Exception {
             String imo = "9839012";
-            when(positionHistoryService.getPositionHistory(imo, 50))
+            when(positionHistoryService.getPositionHistory(imo, principal.getTenantId(), null, 50))
                     .thenReturn(List.of());
 
-            mockMvc.perform(get("/api/v1/vessels/imo/{imo}/track", imo)
+            mockMvc.perform(get("/api/v1/vessels/{imo}/track", imo)
                             .with(user(principal))
                             .param("limit", "50"))
                     .andExpect(status().isOk())
@@ -210,10 +210,10 @@ class VesselControllerTest {
         @DisplayName("Deve retornar 404 quando vessel nao encontrado pelo IMO")
         void deveRetornar404VesselNaoEncontrado() throws Exception {
             String unknownImo = "0000000";
-            when(positionHistoryService.getPositionHistory(unknownImo, 50))
+            when(positionHistoryService.getPositionHistory(unknownImo, principal.getTenantId(), null, 50))
                     .thenThrow(new ResourceNotFoundException("Vessel", unknownImo));
 
-            mockMvc.perform(get("/api/v1/vessels/imo/{imo}/track", unknownImo)
+            mockMvc.perform(get("/api/v1/vessels/{imo}/track", unknownImo)
                             .with(user(principal))
                             .param("limit", "50"))
                     .andExpect(status().isNotFound())
@@ -221,9 +221,41 @@ class VesselControllerTest {
         }
 
         @Test
+        @DisplayName("Deve permitir CLIENT e aplicar customerId no service")
+        void devePermitirClientEAplicarCustomerId() throws Exception {
+            String imo = "9839012";
+            when(positionHistoryService.getPositionHistory(
+                    imo,
+                    clientPrincipal.getTenantId(),
+                    clientPrincipal.getCustomerId(),
+                    50))
+                    .thenReturn(List.of(samplePoint()));
+
+            mockMvc.perform(get("/api/v1/vessels/{imo}/track", imo)
+                            .with(user(clientPrincipal))
+                            .param("limit", "50"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1));
+        }
+
+        @Test
+        @DisplayName("Deve manter compatibilidade com rota legada /imo/{imo}/track")
+        void deveManterCompatibilidadeComRotaLegada() throws Exception {
+            String imo = "9839012";
+            when(positionHistoryService.getPositionHistory(imo, principal.getTenantId(), null, 50))
+                    .thenReturn(List.of(samplePoint()));
+
+            mockMvc.perform(get("/api/v1/vessels/imo/{imo}/track", imo)
+                            .with(user(principal))
+                            .param("limit", "50"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1));
+        }
+
+        @Test
         @DisplayName("Deve retornar 401 sem autenticacao")
         void deveRetornar401SemAuth() throws Exception {
-            mockMvc.perform(get("/api/v1/vessels/imo/{imo}/track", "9839012"))
+            mockMvc.perform(get("/api/v1/vessels/{imo}/track", "9839012"))
                     .andExpect(status().isUnauthorized());
         }
     }

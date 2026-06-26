@@ -169,4 +169,30 @@ public interface ShipmentRepository extends JpaRepository<Shipment, UUID>, JpaSp
             @Param("voyageIds") List<UUID> voyageIds,
             @Param("tenantId") UUID tenantId,
             @Param("customerId") UUID customerId);
+
+    @Query("""
+        SELECT COUNT(s) > 0
+        FROM Shipment s
+        JOIN s.voyage v
+        JOIN v.vessel vessel
+        WHERE vessel.imo = :imo
+          AND s.tenant.id = :tenantId
+    """)
+    boolean existsByVesselImoAndTenantId(
+            @Param("imo") String imo,
+            @Param("tenantId") UUID tenantId);
+
+    @Query("""
+        SELECT COUNT(s) > 0
+        FROM Shipment s
+        JOIN s.voyage v
+        JOIN v.vessel vessel
+        WHERE vessel.imo = :imo
+          AND s.tenant.id = :tenantId
+          AND s.customer.id = :customerId
+    """)
+    boolean existsByVesselImoAndTenantIdAndCustomerId(
+            @Param("imo") String imo,
+            @Param("tenantId") UUID tenantId,
+            @Param("customerId") UUID customerId);
 }

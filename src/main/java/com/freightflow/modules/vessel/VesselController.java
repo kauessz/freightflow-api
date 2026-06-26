@@ -76,16 +76,18 @@ public class VesselController {
 
     /**
      * GET /api/v1/vessels/{imo}/track?limit=50
+     * Legacy alias: GET /api/v1/vessels/imo/{imo}/track?limit=50
      *
      * Returns the recorded AIS position history for a vessel, derived from
-     * POSITION_UPDATE events stored by the PositionTrackingJob.
+     * POSITION_UPDATE events stored by the PositionTrackingJob and scoped
+     * to shipments visible to the authenticated tenant/customer.
      * Points are ordered by event time descending (most recent first).
      *
      * Useful for rendering a breadcrumb trail on a map.
      * Returns an empty list if no POSITION_UPDATE events exist yet.
      */
-    @GetMapping("/imo/{imo}/track")
-    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER"})
+    @GetMapping({"/{imo}/track", "/imo/{imo}/track"})
+    @RequiresRole({"ADMIN", "OPERATOR", "VIEWER", "CLIENT"})
     @Operation(
             summary = "Vessel position track history",
             description = "Returns up to {limit} AIS position snapshots for the vessel's active shipments, " +
@@ -94,8 +96,15 @@ public class VesselController {
     )
     public ResponseEntity<List<PositionTrackPoint>> getTrack(
             @PathVariable String imo,
+            @AuthenticationPrincipal UserPrincipal user,
             @RequestParam(defaultValue = "50") int limit) {
-        List<PositionTrackPoint> track = positionHistoryService.getPositionHistory(imo, limit);
+        UUID customerId = "CLIENT".equals(user.getRole()) ? user.getCustomerId() : null;
+        List<PositionTrackPoint> track = positionHistoryService.getPositionHistory(
+                imo,
+                user.getTenantId(),
+                customerId,
+                limit
+        );
         return ResponseEntity.ok(track);
     }
 
