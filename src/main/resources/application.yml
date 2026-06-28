@@ -84,9 +84,9 @@ spring:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:postgresql://localhost:5432/freightflow_dev
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:freightflow_dev}
+    username: ${DB_USERNAME:freightflow}
+    password: ${DB_PASSWORD:freightflow}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
