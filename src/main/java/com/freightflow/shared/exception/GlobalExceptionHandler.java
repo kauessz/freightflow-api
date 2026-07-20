@@ -1,5 +1,7 @@
 package com.freightflow.shared.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -12,6 +14,8 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex, WebRequest request) {
@@ -60,8 +64,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex, WebRequest request) {
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, 
-            "Database constraint violation: " + ex.getMessage());
+        log.warn("Data integrity violation at {}: {}", request.getDescription(false), ex.getClass().getSimpleName());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+            "A operação não pôde ser concluída porque os dados informados entram em conflito com um registro existente.");
         detail.setTitle("Conflict");
         detail.setType(URI.create("https://api.freightflow.com/errors/conflict"));
         return detail;

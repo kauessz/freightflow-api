@@ -17,7 +17,11 @@
 
 FreightFlow API is a production-ready backend for tracking maritime shipments across ports, voyages, and vessels. It provides a public tracking endpoint by booking number, a full CRUD management layer protected by JWT authentication, real-time event logging per shipment, automated alert generation (delays, demurrage risk, customs holds), and bulk CSV import for shipments and voyages.
 
+It also includes the first foundation of the internal logistics-commercial module under `/api/v1/commercial`, with tenant-scoped RFQs, cargo/container capture, draft quotations, quotation items, deterministic margin/markup calculation on the backend, and explicit exchange-rate semantics for commercial costing.
+
 The domain is modeled after real operations in the **Santos–Buenos Aires corridor** (Mercosul Line / CMA CGM Group routes), covering port scheduling, ETA calculation, and container tracking by UNLOCODE.
+
+The frontend that currently consumes this API lives in the separate repository `freightflow-portal`.
 
 ---
 
