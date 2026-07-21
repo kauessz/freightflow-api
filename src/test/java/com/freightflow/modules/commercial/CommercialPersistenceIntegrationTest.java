@@ -19,7 +19,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,6 +38,7 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
     @Autowired private PortRepository portRepository;
     @Autowired private RfqRepository rfqRepository;
     @Autowired private QuotationRepository quotationRepository;
+    @Autowired private PlatformTransactionManager transactionManager;
 
     @Test
     @DisplayName("deveAplicarFkCompostaPorTenantNaPersistenciaDeQuotation")
@@ -62,16 +68,63 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
         rfq.setStatus(RfqStatus.UNDER_ANALYSIS);
         rfq = rfqRepository.saveAndFlush(rfq);
 
-        Quotation quotation = new Quotation(tenantB, rfq, "Q-X-1", "USD", userB);
+        UUID tenantAId = tenantA.getId();
+        UUID tenantBId = tenantB.getId();
+        UUID userAId = userA.getId();
+        UUID userBId = userB.getId();
+        UUID rfqId = rfq.getId();
 
-        assertThatThrownBy(() -> quotationRepository.saveAndFlush(quotation))
+        assertThatThrownBy(() -> executeInRequiresNew(() -> {
+            Quotation invalidQuotation = new Quotation(
+                    findTenant(tenantBId),
+                    findRfq(rfqId),
+                    "Q-X-1",
+                    "USD",
+                    findUser(userBId)
+            );
+            quotationRepository.saveAndFlush(invalidQuotation);
+            return null;
+        }))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
-        Quotation validQuotation = new Quotation(tenantA, rfq, "Q-X-2", "USD", userA);
-        Quotation persistedQuotation = quotationRepository.saveAndFlush(validQuotation);
+        UUID persistedQuotationId = executeInRequiresNew(() -> {
+            Quotation validQuotation = new Quotation(
+                    findTenant(tenantAId),
+                    findRfq(rfqId),
+                    "Q-X-2",
+                    "USD",
+                    findUser(userAId)
+            );
+            return quotationRepository.saveAndFlush(validQuotation).getId();
+        });
+
+        Quotation persistedQuotation = quotationRepository.findById(persistedQuotationId).orElseThrow();
 
         assertThat(persistedQuotation.getId()).isNotNull();
-        assertThat(persistedQuotation.getTenant().getId()).isEqualTo(tenantA.getId());
-        assertThat(persistedQuotation.getRfq().getId()).isEqualTo(rfq.getId());
+        assertThat(persistedQuotation.getTenant().getId()).isEqualTo(tenantAId);
+        assertThat(persistedQuotation.getRfq().getId()).isEqualTo(rfqId);
+    }
+
+    private <T> T executeInRequiresNew(TransactionCallback<T> callback) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return template.execute(status -> callback.execute());
+    }
+
+    private Tenant findTenant(UUID tenantId) {
+        return tenantRepository.findById(tenantId).orElseThrow();
+    }
+
+    private User findUser(UUID userId) {
+        return userRepository.findById(userId).orElseThrow();
+    }
+
+    private RequestForQuotation findRfq(UUID rfqId) {
+        return rfqRepository.findById(rfqId).orElseThrow();
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute();
     }
 }
