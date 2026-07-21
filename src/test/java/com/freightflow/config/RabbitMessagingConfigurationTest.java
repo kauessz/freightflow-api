@@ -26,15 +26,20 @@ import static org.mockito.Mockito.mock;
 @DisplayName("Rabbit messaging configuration")
 class RabbitMessagingConfigurationTest {
 
-    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(TestMessagingContext.class, RabbitMQConfig.class);
+    private final ApplicationContextRunner disabledContextRunner = new ApplicationContextRunner()
+            .withUserConfiguration(MessagingDisabledContext.class, RabbitMQConfig.class);
+
+    private final ApplicationContextRunner enabledContextRunner = new ApplicationContextRunner()
+            .withUserConfiguration(MessagingEnabledContext.class, RabbitMQConfig.class);
 
     @Test
-    @DisplayName("should not create Rabbit beans or listener when messaging is disabled")
-    void should_notCreateRabbitBeansOrListener_whenMessagingDisabled() {
-        contextRunner
+    @DisplayName("should start without Rabbit beans or ConnectionFactory when messaging is disabled")
+    void should_startWithoutRabbitBeansOrConnectionFactory_whenMessagingDisabled() {
+        disabledContextRunner
                 .withPropertyValues("freightflow.messaging.enabled=false")
                 .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(ConnectionFactory.class);
                     assertThat(context).doesNotHaveBean(RabbitTemplate.class);
                     assertThat(context).doesNotHaveBean(TopicExchange.class);
                     assertThat(context).doesNotHaveBean(Queue.class);
@@ -52,10 +57,11 @@ class RabbitMessagingConfigurationTest {
     @Test
     @DisplayName("should create Rabbit beans and listener when messaging is enabled")
     void should_createRabbitBeansAndListener_whenMessagingEnabled() {
-        contextRunner
+        enabledContextRunner
                 .withPropertyValues("freightflow.messaging.enabled=true")
                 .run(context -> {
                     assertThat(context).hasSingleBean(RabbitTemplate.class);
+                    assertThat(context).hasSingleBean(ConnectionFactory.class);
                     assertThat(context).hasSingleBean(TopicExchange.class);
                     assertThat(context).hasSingleBean(Queue.class);
                     assertThat(context).hasSingleBean(AlertEventConsumer.class);
@@ -65,7 +71,22 @@ class RabbitMessagingConfigurationTest {
 
     @Configuration(proxyBeanMethods = false)
     @Import({AlertEventConsumer.class, AlertEventPublisher.class})
-    static class TestMessagingContext {
+    static class MessagingDisabledContext {
+
+        @Bean
+        AlertRepository alertRepository() {
+            return mock(AlertRepository.class);
+        }
+
+        @Bean
+        WebhookEventPublisher webhookEventPublisher() {
+            return mock(WebhookEventPublisher.class);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @Import({AlertEventConsumer.class, AlertEventPublisher.class})
+    static class MessagingEnabledContext {
 
         @Bean
         ConnectionFactory connectionFactory() {

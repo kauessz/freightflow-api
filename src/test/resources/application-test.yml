@@ -39,6 +39,8 @@ freightflow:
     secret: test-secret-key-minimum-32-bytes-for-hs256-algorithm
     expiration-ms: 3600000        # 1h para testes
     refresh-expiration-ms: 86400000
+  messaging:
+    enabled: false
 
 logging:
   level:

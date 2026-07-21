@@ -168,6 +168,8 @@ freightflow:
     ais-ttl-minutes: 1
   tracking:
     interval-ms: 999999999  # effectively never runs in tests
+  messaging:
+    enabled: false
   storage:
     endpoint: ${STORAGE_ENDPOINT:}
     bucket: ${STORAGE_BUCKET:freightflow-docs-test}
@@ -215,6 +217,8 @@ freightflow:
   jwt:
     secret: ${JWT_SECRET}
     expiration-ms: ${JWT_EXPIRATION:86400000}
+  messaging:
+    enabled: false
   cache:
     ais-ttl-minutes: 5
   tracking:
