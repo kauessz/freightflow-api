@@ -1,4 +1,4 @@
-package com.freightflow.modules.commercial;
+package com.freightflow.helpers;
 
 import com.freightflow.AbstractIntegrationTest;
 import com.freightflow.modules.auth.Tenant;
@@ -22,17 +22,16 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DisplayName("Commercial persistence integration")
-@Testcontainers(disabledWithoutDocker = true)
-class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
+@DisplayName("Database cleaner integration")
+class DatabaseCleanerIntegrationTest extends AbstractIntegrationTest {
 
+    @Autowired private DatabaseCleaner databaseCleaner;
     @Autowired private TenantRepository tenantRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private PortRepository portRepository;
@@ -41,24 +40,20 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
     @Autowired private PlatformTransactionManager transactionManager;
 
     @Test
-    @DisplayName("deveAplicarFkCompostaPorTenantNaPersistenciaDeQuotation")
-    void deveAplicarFkCompostaPorTenantNaPersistenciaDeQuotation() {
-        executeCrossTenantConstraintScenario("X");
-    }
+    @DisplayName("deveLimparBancoEAceitarNovasOperacoesAposViolacaoEsperada")
+    void deveLimparBancoEAceitarNovasOperacoesAposViolacaoEsperada() {
+        Tenant tenantA = tenantRepository.save(new Tenant("Cleaner Tenant A", "cleaner-tenant-a", "cleaner-a@test.com", "FREE"));
+        Tenant tenantB = tenantRepository.save(new Tenant("Cleaner Tenant B", "cleaner-tenant-b", "cleaner-b@test.com", "FREE"));
 
-    private void executeCrossTenantConstraintScenario(String suffix) {
-        Tenant tenantA = tenantRepository.save(new Tenant("Tenant " + suffix + " A", "tenant-" + suffix.toLowerCase() + "-a", "a-" + suffix.toLowerCase() + "@test.com", "FREE"));
-        Tenant tenantB = tenantRepository.save(new Tenant("Tenant " + suffix + " B", "tenant-" + suffix.toLowerCase() + "-b", "b-" + suffix.toLowerCase() + "@test.com", "FREE"));
+        User userA = userRepository.save(new User("Cleaner User A", "cleaner-user-a@test.com", "hash", User.UserRole.ADMIN, tenantA));
+        User userB = userRepository.save(new User("Cleaner User B", "cleaner-user-b@test.com", "hash", User.UserRole.ADMIN, tenantB));
 
-        User userA = userRepository.save(new User("User A", "user-a-" + suffix.toLowerCase() + "@test.com", "hash", User.UserRole.ADMIN, tenantA));
-        User userB = userRepository.save(new User("User B", "user-b-" + suffix.toLowerCase() + "@test.com", "hash", User.UserRole.ADMIN, tenantB));
-
-        Port origin = portRepository.save(new Port("BRS" + suffix + "1", "Santos Test " + suffix, "BR", "America/Sao_Paulo", null, null));
-        Port destination = portRepository.save(new Port("NLR" + suffix + "1", "Rotterdam Test " + suffix, "NL", "Europe/Amsterdam", null, null));
+        Port origin = portRepository.save(new Port("CLN01", "Cleaner Santos", "BR", "America/Sao_Paulo", null, null));
+        Port destination = portRepository.save(new Port("CLN02", "Cleaner Rotterdam", "NL", "Europe/Amsterdam", null, null));
 
         RequestForQuotation rfq = new RequestForQuotation(
                 tenantA,
-                "RFQ-" + suffix + "-1",
+                "RFQ-CLEAN-1",
                 "Maria",
                 RfqDirection.EXPORT,
                 RfqTransportMode.OCEAN,
@@ -67,14 +62,13 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
                 destination,
                 userA
         );
-        rfq.setContactEmail("maria-" + suffix.toLowerCase() + "@test.com");
-        rfq.setProspectCompanyName("Prospect " + suffix);
+        rfq.setContactEmail("cleaner-maria@test.com");
+        rfq.setProspectCompanyName("Cleaner Prospect");
         rfq.setStatus(RfqStatus.UNDER_ANALYSIS);
         rfq = rfqRepository.saveAndFlush(rfq);
 
         UUID tenantAId = tenantA.getId();
         UUID tenantBId = tenantB.getId();
-        UUID userAId = userA.getId();
         UUID userBId = userB.getId();
         UUID rfqId = rfq.getId();
 
@@ -82,31 +76,27 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
             Quotation invalidQuotation = new Quotation(
                     findTenant(tenantBId),
                     findRfq(rfqId),
-                    "Q-" + suffix + "-1",
+                    "Q-CLEAN-1",
                     "USD",
                     findUser(userBId)
             );
             quotationRepository.saveAndFlush(invalidQuotation);
             return null;
-        }))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        })).isInstanceOf(DataIntegrityViolationException.class);
 
-        UUID persistedQuotationId = executeInRequiresNew(() -> {
-            Quotation validQuotation = new Quotation(
-                    findTenant(tenantAId),
-                    findRfq(rfqId),
-                    "Q-" + suffix + "-2",
-                    "USD",
-                    findUser(userAId)
-            );
-            return quotationRepository.saveAndFlush(validQuotation).getId();
-        });
+        databaseCleaner.clean();
 
-        Quotation persistedQuotation = quotationRepository.findById(persistedQuotationId).orElseThrow();
+        assertThat(tenantRepository.count()).isZero();
+        assertThat(rfqRepository.count()).isZero();
+        assertThat(quotationRepository.count()).isZero();
 
-        assertThat(persistedQuotation.getId()).isNotNull();
-        assertThat(persistedQuotation.getTenant().getId()).isEqualTo(tenantAId);
-        assertThat(persistedQuotation.getRfq().getId()).isEqualTo(rfqId);
+        Tenant persistedAfterClean = tenantRepository.saveAndFlush(
+                new Tenant("Post Clean Tenant", "post-clean-tenant", "post-clean@test.com", "FREE")
+        );
+
+        assertThat(persistedAfterClean.getId()).isNotNull();
+        assertThat(tenantRepository.count()).isEqualTo(1);
+        assertThat(tenantAId).isNotEqualTo(tenantBId);
     }
 
     private <T> T executeInRequiresNew(TransactionCallback<T> callback) {

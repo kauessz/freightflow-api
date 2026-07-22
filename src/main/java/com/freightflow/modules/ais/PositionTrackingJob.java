@@ -12,6 +12,7 @@ import com.freightflow.modules.voyage.enums.VoyageStatus;
 import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * (approx. 5.5 km at the equator), or when there is no previous POSITION_UPDATE event.
  */
 @Component
+@Profile("!test")
 public class PositionTrackingJob {
 
     private static final Logger log = LoggerFactory.getLogger(PositionTrackingJob.class);

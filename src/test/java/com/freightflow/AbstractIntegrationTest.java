@@ -11,7 +11,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
@@ -43,13 +42,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 public abstract class AbstractIntegrationTest {
 
     // ── Container único e reutilizável entre todos os testes ──────────────
-    @Container
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("postgres:16-alpine")
                     .withDatabaseName("freightflow_test")
                     .withUsername("freight")
                     .withPassword("freight123")
                     .withReuse(true);   // reusa o container entre execuções com TC_REUSABLE=true
+
+    static {
+        POSTGRES.start();
+    }
 
     /**
      * Sobrescreve as propriedades de datasource do application-test.yml

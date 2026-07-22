@@ -27,6 +27,10 @@ spring:
     clean-disabled: false         # permite flyway:clean nos testes
     locations: classpath:db/migration
 
+  task:
+    scheduling:
+      enabled: false
+
   # ── Desabilita Redis e RabbitMQ em testes (sem infra externa) ──
   autoconfigure:
     exclude:
