@@ -13,6 +13,8 @@ import com.freightflow.modules.commercial.rfq.enums.RfqDirection;
 import com.freightflow.modules.commercial.rfq.enums.RfqServiceType;
 import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
+import com.freightflow.modules.customer.Customer;
+import com.freightflow.modules.customer.CustomerRepository;
 import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +40,7 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
     @Autowired private PortRepository portRepository;
     @Autowired private RfqRepository rfqRepository;
     @Autowired private QuotationRepository quotationRepository;
+    @Autowired private CustomerRepository customerRepository;
     @Autowired private PlatformTransactionManager transactionManager;
 
     @Test
@@ -52,15 +55,7 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
         Tenant tenantA = tenantRepository.save(new Tenant("Tenant User A", "tenant-user-a", "ua@test.com", "FREE"));
         Tenant tenantB = tenantRepository.save(new Tenant("Tenant User B", "tenant-user-b", "ub@test.com", "FREE"));
 
-        com.freightflow.modules.customer.Customer customerA =
-                new com.freightflow.modules.customer.Customer(tenantA, "Atlas Cargo");
-        org.springframework.test.util.ReflectionTestUtils.setField(customerA, "id", UUID.randomUUID());
-
-        executeInRequiresNew(() -> {
-            entityManager().persist(customerA);
-            entityManager().flush();
-            return null;
-        });
+        Customer customerA = customerRepository.saveAndFlush(new Customer(tenantA, "Atlas Cargo"));
 
         assertThatThrownBy(() -> executeInRequiresNew(() -> {
             User invalidClient = new User("Client B", "client-b@test.com", "hash", User.UserRole.CLIENT, tenantB);
@@ -216,13 +211,6 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
 
     private RequestForQuotation findRfq(UUID rfqId) {
         return rfqRepository.findById(rfqId).orElseThrow();
-    }
-
-    @jakarta.persistence.PersistenceContext
-    private jakarta.persistence.EntityManager entityManager;
-
-    private jakarta.persistence.EntityManager entityManager() {
-        return entityManager;
     }
 
     @FunctionalInterface

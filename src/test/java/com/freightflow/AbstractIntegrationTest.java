@@ -3,6 +3,8 @@ package com.freightflow;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.freightflow.helpers.DatabaseCleaner;
 import org.junit.jupiter.api.BeforeEach;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,9 +12,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Classe base para todos os testes de integração.
@@ -42,14 +45,46 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers(disabledWithoutDocker = true)
 public abstract class AbstractIntegrationTest {
 
-    // ── Container único e reutilizável entre todos os testes ──────────────
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:16-alpine")
+    private static final Logger log = LoggerFactory.getLogger(AbstractIntegrationTest.class);
+    private static final Object POSTGRES_LOCK = new Object();
+    private static final AtomicBoolean SHUTDOWN_HOOK_REGISTERED = new AtomicBoolean(false);
+
+    private static volatile PostgreSQLContainer<?> postgres;
+
+    private static PostgreSQLContainer<?> postgres() {
+        PostgreSQLContainer<?> current = postgres;
+        if (current != null && current.isRunning()) {
+            return current;
+        }
+
+        synchronized (POSTGRES_LOCK) {
+            current = postgres;
+            if (current != null && current.isRunning()) {
+                return current;
+            }
+
+            current = new PostgreSQLContainer<>("postgres:16-alpine")
                     .withDatabaseName("freightflow_test")
                     .withUsername("freight")
-                    .withPassword("freight123")
-                    .withReuse(true);   // reusa o container entre execuções com TC_REUSABLE=true
+                    .withPassword("freight123");
+
+            log.info("Starting shared PostgreSQL Testcontainer for integration tests");
+            current.start();
+            log.info("Shared PostgreSQL Testcontainer started at {}", current.getJdbcUrl());
+
+            if (SHUTDOWN_HOOK_REGISTERED.compareAndSet(false, true)) {
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    PostgreSQLContainer<?> running = postgres;
+                    if (running != null && running.isRunning()) {
+                        running.stop();
+                    }
+                }, "freightflow-test-postgres-shutdown"));
+            }
+
+            postgres = current;
+            return current;
+        }
+    }
 
     /**
      * Sobrescreve as propriedades de datasource do application-test.yml
@@ -57,9 +92,9 @@ public abstract class AbstractIntegrationTest {
      */
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url",      POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> postgres().getJdbcUrl());
+        registry.add("spring.datasource.username", () -> postgres().getUsername());
+        registry.add("spring.datasource.password", () -> postgres().getPassword());
     }
 
     // ── Beans injetados ───────────────────────────────────────────────────

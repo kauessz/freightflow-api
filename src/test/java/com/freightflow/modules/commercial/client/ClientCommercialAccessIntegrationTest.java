@@ -15,6 +15,7 @@ import com.freightflow.modules.commercial.rfq.enums.RfqServiceType;
 import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
 import com.freightflow.modules.customer.Customer;
+import com.freightflow.modules.customer.CustomerRepository;
 import com.freightflow.modules.port.Port;
 import com.freightflow.modules.port.PortRepository;
 import com.freightflow.shared.security.UserPrincipal;
@@ -23,11 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.UUID;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -41,9 +38,7 @@ class ClientCommercialAccessIntegrationTest extends AbstractIntegrationTest {
     @Autowired private PortRepository portRepository;
     @Autowired private RfqRepository rfqRepository;
     @Autowired private QuotationRepository quotationRepository;
-
-    @jakarta.persistence.PersistenceContext
-    private jakarta.persistence.EntityManager entityManager;
+    @Autowired private CustomerRepository customerRepository;
 
     private Tenant tenant;
     private Customer customerA;
@@ -58,13 +53,8 @@ class ClientCommercialAccessIntegrationTest extends AbstractIntegrationTest {
     void setUpData() {
         tenant = tenantRepository.save(new Tenant("Portal Tenant", "portal-tenant", "portal@test.com", "FREE"));
 
-        customerA = new Customer(tenant, "Atlas Cargo");
-        ReflectionTestUtils.setField(customerA, "id", UUID.randomUUID());
-        entityManager.persist(customerA);
-
-        customerB = new Customer(tenant, "Meridian Imports");
-        ReflectionTestUtils.setField(customerB, "id", UUID.randomUUID());
-        entityManager.persist(customerB);
+        customerA = customerRepository.saveAndFlush(new Customer(tenant, "Atlas Cargo"));
+        customerB = customerRepository.saveAndFlush(new Customer(tenant, "Meridian Imports"));
 
         clientA = new User("Client A", "client-a@test.com", "hash", User.UserRole.CLIENT, tenant);
         clientA.setCustomer(customerA);
