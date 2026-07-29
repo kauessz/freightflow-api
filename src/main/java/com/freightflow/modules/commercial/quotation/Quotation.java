@@ -111,11 +111,22 @@ public class Quotation {
     @Column
     private Instant approvedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by")
+    private User approvedBy;
+
     @Column
     private Instant rejectedAt;
 
     @Column
     private Instant expiredAt;
+
+    @Column
+    private Instant sentAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sent_by")
+    private User sentBy;
 
     @OneToMany(mappedBy = "quotation", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<QuotationItem> items = new ArrayList<>();
@@ -172,8 +183,11 @@ public class Quotation {
     public User getCreatedBy() { return createdBy; }
     public Instant getSubmittedAt() { return submittedAt; }
     public Instant getApprovedAt() { return approvedAt; }
+    public User getApprovedBy() { return approvedBy; }
     public Instant getRejectedAt() { return rejectedAt; }
     public Instant getExpiredAt() { return expiredAt; }
+    public Instant getSentAt() { return sentAt; }
+    public User getSentBy() { return sentBy; }
     public List<QuotationItem> getItems() { return items; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
@@ -194,8 +208,11 @@ public class Quotation {
     public void setInternalNotes(String internalNotes) { this.internalNotes = internalNotes; touch(); }
     public void setSubmittedAt(Instant submittedAt) { this.submittedAt = submittedAt; touch(); }
     public void setApprovedAt(Instant approvedAt) { this.approvedAt = approvedAt; touch(); }
+    public void setApprovedBy(User approvedBy) { this.approvedBy = approvedBy; touch(); }
     public void setRejectedAt(Instant rejectedAt) { this.rejectedAt = rejectedAt; touch(); }
     public void setExpiredAt(Instant expiredAt) { this.expiredAt = expiredAt; touch(); }
+    public void setSentAt(Instant sentAt) { this.sentAt = sentAt; touch(); }
+    public void setSentBy(User sentBy) { this.sentBy = sentBy; touch(); }
     public void setTotals(BigDecimal costTotal, BigDecimal sellingTotal, BigDecimal profitAmount,
                           BigDecimal marginPercentage, BigDecimal markupPercentage) {
         this.costTotal = costTotal;

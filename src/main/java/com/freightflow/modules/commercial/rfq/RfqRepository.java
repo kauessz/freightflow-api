@@ -3,6 +3,7 @@ package com.freightflow.modules.commercial.rfq;
 import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
@@ -14,6 +15,9 @@ public interface RfqRepository extends JpaRepository<RequestForQuotation, UUID>,
 
     Optional<RequestForQuotation> findByIdAndTenantId(UUID id, UUID tenantId);
 
+    @EntityGraph(attributePaths = {"customer", "originPort", "destinationPort", "assignedTo", "createdBy"})
+    Optional<RequestForQuotation> findByIdAndTenantIdAndCustomerId(UUID id, UUID tenantId, UUID customerId);
+
     boolean existsByReferenceAndTenantId(String reference, UUID tenantId);
 
     boolean existsByReferenceAndTenantIdAndIdNot(String reference, UUID tenantId, UUID id);
@@ -23,6 +27,9 @@ public interface RfqRepository extends JpaRepository<RequestForQuotation, UUID>,
     long countByTenantIdAndStatus(UUID tenantId, RfqStatus status);
 
     Page<RequestForQuotation> findByTenantId(UUID tenantId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"customer", "originPort", "destinationPort"})
+    Page<RequestForQuotation> findByTenantIdAndCustomerId(UUID tenantId, UUID customerId, Pageable pageable);
 
     List<RequestForQuotation> findByTenantIdAndStatus(UUID tenantId, RfqStatus status);
 }

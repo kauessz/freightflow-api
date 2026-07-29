@@ -35,4 +35,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             org.springframework.data.domain.Pageable pageable);
 
     Optional<User> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    boolean existsByTenantIdAndCustomerId(UUID tenantId, UUID customerId);
 }

@@ -46,6 +46,97 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
         executeCrossTenantConstraintScenario("X");
     }
 
+    @Test
+    @DisplayName("deveAplicarFkTenantAwareEntreUserECliente")
+    void deveAplicarFkTenantAwareEntreUserECliente() {
+        Tenant tenantA = tenantRepository.save(new Tenant("Tenant User A", "tenant-user-a", "ua@test.com", "FREE"));
+        Tenant tenantB = tenantRepository.save(new Tenant("Tenant User B", "tenant-user-b", "ub@test.com", "FREE"));
+
+        com.freightflow.modules.customer.Customer customerA =
+                new com.freightflow.modules.customer.Customer(tenantA, "Atlas Cargo");
+        org.springframework.test.util.ReflectionTestUtils.setField(customerA, "id", UUID.randomUUID());
+
+        executeInRequiresNew(() -> {
+            entityManager().persist(customerA);
+            entityManager().flush();
+            return null;
+        });
+
+        assertThatThrownBy(() -> executeInRequiresNew(() -> {
+            User invalidClient = new User("Client B", "client-b@test.com", "hash", User.UserRole.CLIENT, tenantB);
+            invalidClient.setCustomer(customerA);
+            userRepository.saveAndFlush(invalidClient);
+            return null;
+        })).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("deveAplicarFkTenantAwareParaApprovedByESentBy")
+    void deveAplicarFkTenantAwareParaApprovedByESentBy() {
+        Tenant tenantA = tenantRepository.save(new Tenant("Tenant Audit A", "tenant-audit-a", "audit-a@test.com", "FREE"));
+        Tenant tenantB = tenantRepository.save(new Tenant("Tenant Audit B", "tenant-audit-b", "audit-b@test.com", "FREE"));
+
+        User userA = userRepository.save(new User("User A", "audit-user-a@test.com", "hash", User.UserRole.ADMIN, tenantA));
+        User userB = userRepository.save(new User("User B", "audit-user-b@test.com", "hash", User.UserRole.ADMIN, tenantB));
+
+        Port origin = portRepository.save(new Port("BRAD1", "Audit Santos", "BR", "America/Sao_Paulo", null, null));
+        Port destination = portRepository.save(new Port("NLAD1", "Audit Rotterdam", "NL", "Europe/Amsterdam", null, null));
+
+        RequestForQuotation rfq = new RequestForQuotation(
+                tenantA,
+                "RFQ-AUDIT-1",
+                "Maria",
+                RfqDirection.EXPORT,
+                RfqTransportMode.OCEAN,
+                RfqServiceType.LCL,
+                origin,
+                destination,
+                userA
+        );
+        rfq.setContactEmail("audit@test.com");
+        rfq.setProspectCompanyName("Prospect Audit");
+        rfq.setStatus(RfqStatus.UNDER_ANALYSIS);
+        rfq = rfqRepository.saveAndFlush(rfq);
+        UUID rfqId = rfq.getId();
+
+        Quotation quotation = executeInRequiresNew(() -> {
+            Quotation value = new Quotation(findTenant(tenantA.getId()), findRfq(rfqId), "Q-AUDIT-1", "USD", findUser(userA.getId()));
+            value.setStatus(com.freightflow.modules.commercial.quotation.enums.QuotationStatus.APPROVED);
+            return quotationRepository.saveAndFlush(value);
+        });
+
+        UUID quotationId = quotation.getId();
+
+        assertThatThrownBy(() -> executeInRequiresNew(() -> {
+            Quotation invalidApproved = quotationRepository.findById(quotationId).orElseThrow();
+            invalidApproved.setApprovedBy(findUser(userB.getId()));
+            invalidApproved.setApprovedAt(java.time.Instant.now());
+            quotationRepository.saveAndFlush(invalidApproved);
+            return null;
+        })).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> executeInRequiresNew(() -> {
+            Quotation invalidSent = quotationRepository.findById(quotationId).orElseThrow();
+            invalidSent.setSentBy(findUser(userB.getId()));
+            invalidSent.setSentAt(java.time.Instant.now());
+            quotationRepository.saveAndFlush(invalidSent);
+            return null;
+        })).isInstanceOf(DataIntegrityViolationException.class);
+
+        UUID validQuotationId = executeInRequiresNew(() -> {
+            Quotation valid = quotationRepository.findById(quotationId).orElseThrow();
+            valid.setApprovedBy(findUser(userA.getId()));
+            valid.setApprovedAt(java.time.Instant.parse("2026-07-29T12:00:00Z"));
+            valid.setSentBy(findUser(userA.getId()));
+            valid.setSentAt(java.time.Instant.parse("2026-07-29T12:30:00Z"));
+            return quotationRepository.saveAndFlush(valid).getId();
+        });
+
+        Quotation persisted = quotationRepository.findById(validQuotationId).orElseThrow();
+        assertThat(persisted.getApprovedBy().getId()).isEqualTo(userA.getId());
+        assertThat(persisted.getSentBy().getId()).isEqualTo(userA.getId());
+    }
+
     private void executeCrossTenantConstraintScenario(String suffix) {
         Tenant tenantA = tenantRepository.save(new Tenant("Tenant " + suffix + " A", "tenant-" + suffix.toLowerCase() + "-a", "a-" + suffix.toLowerCase() + "@test.com", "FREE"));
         Tenant tenantB = tenantRepository.save(new Tenant("Tenant " + suffix + " B", "tenant-" + suffix.toLowerCase() + "-b", "b-" + suffix.toLowerCase() + "@test.com", "FREE"));
@@ -125,6 +216,13 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
 
     private RequestForQuotation findRfq(UUID rfqId) {
         return rfqRepository.findById(rfqId).orElseThrow();
+    }
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
+    private jakarta.persistence.EntityManager entityManager() {
+        return entityManager;
     }
 
     @FunctionalInterface

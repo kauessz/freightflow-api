@@ -3,6 +3,7 @@ package com.freightflow.modules.customer;
 import com.freightflow.fixtures.TestDataFactory;
 import com.freightflow.modules.auth.Tenant;
 import com.freightflow.modules.auth.TenantRepository;
+import com.freightflow.modules.auth.UserRepository;
 import com.freightflow.modules.customer.dto.CreateCustomerRequest;
 import com.freightflow.modules.customer.dto.CustomerResponse;
 import com.freightflow.shared.exception.BusinessException;
@@ -39,6 +40,9 @@ class CustomerServiceTest {
     @Mock
     private TenantRepository tenantRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private CustomerService customerService;
 
@@ -52,6 +56,53 @@ class CustomerServiceTest {
         tenantB  = TestDataFactory.tenant(UUID.randomUUID(), "Other Company", "other-company");
         customer = new Customer(tenantA, "Atlas Cargo");
         TestDataFactory.setEntityId(customer, UUID.randomUUID());
+    }
+
+    @Nested
+    @DisplayName("delete()")
+    class DeleteTests {
+
+        @Test
+        @DisplayName("should_blockDelete_when_customerHasLinkedUserInSameTenant")
+        void should_blockDelete_when_customerHasLinkedUserInSameTenant() {
+            UUID customerId = customer.getId();
+            when(customerRepository.findByIdAndTenantId(customerId, tenantA.getId()))
+                    .thenReturn(Optional.of(customer));
+            when(userRepository.existsByTenantIdAndCustomerId(tenantA.getId(), customerId))
+                    .thenReturn(true);
+
+            assertThatThrownBy(() -> customerService.delete(customerId, tenantA.getId()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("linked to active users");
+        }
+
+        @Test
+        @DisplayName("should_allowDelete_when_customerHasNoLinkedUserInCallerTenant")
+        void should_allowDelete_when_customerHasNoLinkedUserInCallerTenant() {
+            UUID customerId = customer.getId();
+            when(customerRepository.findByIdAndTenantId(customerId, tenantA.getId()))
+                    .thenReturn(Optional.of(customer));
+            when(userRepository.existsByTenantIdAndCustomerId(tenantA.getId(), customerId))
+                    .thenReturn(false);
+
+            customerService.delete(customerId, tenantA.getId());
+
+            org.mockito.Mockito.verify(customerRepository).delete(customer);
+        }
+
+        @Test
+        @DisplayName("should_ignoreLinkedUserFromAnotherTenant")
+        void should_ignoreLinkedUserFromAnotherTenant() {
+            UUID customerId = customer.getId();
+            when(customerRepository.findByIdAndTenantId(customerId, tenantA.getId()))
+                    .thenReturn(Optional.of(customer));
+            when(userRepository.existsByTenantIdAndCustomerId(tenantA.getId(), customerId))
+                    .thenReturn(false);
+
+            customerService.delete(customerId, tenantA.getId());
+
+            org.mockito.Mockito.verify(customerRepository).delete(customer);
+        }
     }
 
     // ── list() ────────────────────────────────────────────────────────────

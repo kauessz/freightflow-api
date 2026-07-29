@@ -229,6 +229,49 @@ public class QuotationService {
         return QuotationResponse.from(saved, quotationCountForRfq(tenantId, saved.getRfq().getId()));
     }
 
+    @Transactional
+    public QuotationResponse approve(UUID id, UUID tenantId, UUID userId) {
+        Quotation quotation = getScopedQuotation(id, tenantId);
+        if (quotation.getStatus() != QuotationStatus.READY_FOR_REVIEW) {
+            throw new BusinessException("Only quotations in READY_FOR_REVIEW can be approved");
+        }
+
+        User approver = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        quotation.setStatus(QuotationStatus.APPROVED);
+        quotation.setApprovedAt(java.time.Instant.now());
+        quotation.setApprovedBy(approver);
+
+        Quotation saved = quotationRepository.save(quotation);
+        return QuotationResponse.from(saved, quotationCountForRfq(tenantId, saved.getRfq().getId()));
+    }
+
+    @Transactional
+    public QuotationResponse send(UUID id, UUID tenantId, UUID userId) {
+        Quotation quotation = getScopedQuotation(id, tenantId);
+        if (quotation.getStatus() != QuotationStatus.APPROVED) {
+            throw new BusinessException("Only quotations in APPROVED can be sent");
+        }
+
+        RequestForQuotation rfq = quotation.getRfq();
+        if (rfq.getStatus() != RfqStatus.UNDER_ANALYSIS) {
+            throw new BusinessException("Only quotations linked to RFQs in UNDER_ANALYSIS can be sent");
+        }
+
+        User sender = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        quotation.setStatus(QuotationStatus.SENT);
+        quotation.setSentAt(java.time.Instant.now());
+        quotation.setSentBy(sender);
+
+        rfq.setStatus(RfqStatus.QUOTED);
+
+        Quotation saved = quotationRepository.save(quotation);
+        return QuotationResponse.from(saved, quotationCountForRfq(tenantId, saved.getRfq().getId()));
+    }
+
     private Specification<Quotation> buildSpec(UUID tenantId, QuotationFilterParams filters) {
         return Specification.where(hasTenant(tenantId))
                 .and(hasSearch(filters.search()))

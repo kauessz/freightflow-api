@@ -12,6 +12,8 @@ import com.freightflow.shared.pagination.PageResponse;
 import com.freightflow.shared.rbac.RequiresRole;
 import com.freightflow.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -119,6 +121,42 @@ public class QuotationController {
     public ResponseEntity<QuotationResponse> readyForReview(@PathVariable UUID id,
                                                             @AuthenticationPrincipal UserPrincipal user) {
         return ResponseEntity.ok(quotationService.readyForReview(id, user.getTenantId()));
+    }
+
+    @PostMapping("/api/v1/commercial/quotations/{id}/approve")
+    @RequiresRole("ADMIN")
+    @Operation(
+            summary = "Approve quotation for internal release",
+            description = "Restricted to ADMIN. Only quotations in READY_FOR_REVIEW can transition to APPROVED."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Quotation approved successfully"),
+            @ApiResponse(responseCode = "401", description = "Authentication required"),
+            @ApiResponse(responseCode = "403", description = "Only ADMIN can approve quotations"),
+            @ApiResponse(responseCode = "404", description = "Quotation not found in the authenticated tenant"),
+            @ApiResponse(responseCode = "409", description = "Quotation is not in READY_FOR_REVIEW")
+    })
+    public ResponseEntity<QuotationResponse> approve(@PathVariable UUID id,
+                                                     @AuthenticationPrincipal UserPrincipal user) {
+        return ResponseEntity.ok(quotationService.approve(id, user.getTenantId(), user.getId()));
+    }
+
+    @PostMapping("/api/v1/commercial/quotations/{id}/send")
+    @RequiresRole("ADMIN")
+    @Operation(
+            summary = "Make approved quotation available to the customer portal",
+            description = "Restricted to ADMIN. Requires quotation in APPROVED and related RFQ in UNDER_ANALYSIS. On success, quotation becomes SENT and the RFQ becomes QUOTED."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Quotation sent successfully and RFQ moved to QUOTED"),
+            @ApiResponse(responseCode = "401", description = "Authentication required"),
+            @ApiResponse(responseCode = "403", description = "Only ADMIN can send quotations"),
+            @ApiResponse(responseCode = "404", description = "Quotation not found in the authenticated tenant"),
+            @ApiResponse(responseCode = "409", description = "Quotation is not in APPROVED or RFQ is not in UNDER_ANALYSIS")
+    })
+    public ResponseEntity<QuotationResponse> send(@PathVariable UUID id,
+                                                  @AuthenticationPrincipal UserPrincipal user) {
+        return ResponseEntity.ok(quotationService.send(id, user.getTenantId(), user.getId()));
     }
 
     @PostMapping("/api/v1/commercial/quotations/{id}/cancel")

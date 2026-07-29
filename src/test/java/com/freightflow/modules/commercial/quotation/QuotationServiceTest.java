@@ -78,6 +78,7 @@ class QuotationServiceTest {
         ReflectionTestUtils.setField(rfq, "id", rfqId);
         rfq.setCustomer(customer);
         rfq.setContactEmail("maria@test.com");
+        rfq.setStatus(RfqStatus.UNDER_ANALYSIS);
         rfq.replaceCargoItems(List.of(new com.freightflow.modules.commercial.rfq.RfqCargoItem("Cargo", 1, BigDecimal.valueOf(100), com.freightflow.modules.commercial.shared.WeightUnit.KG)));
         rfq.replaceContainerRequirements(List.of(new com.freightflow.modules.commercial.rfq.RfqContainerRequirement(com.freightflow.modules.commercial.rfq.enums.RfqContainerType.DRY_20, 1)));
         quotationService = new QuotationService(
@@ -93,7 +94,6 @@ class QuotationServiceTest {
     @DisplayName("deveCriarCotacaoValida")
     void deveCriarCotacaoValida() {
         CreateQuotationRequest request = validQuotationRequest();
-        rfq.setStatus(RfqStatus.UNDER_ANALYSIS);
 
         when(rfqRepository.findByIdAndTenantId(rfqId, tenantId)).thenReturn(Optional.of(rfq));
         when(quotationRepository.existsByTenantIdAndQuotationNumberAndRevision(tenantId, "Q-001", 1)).thenReturn(false);
@@ -253,7 +253,137 @@ class QuotationServiceTest {
         var response = quotationService.readyForReview(quotation.getId(), tenantId);
 
         assertThat(response.status()).isEqualTo(QuotationStatus.READY_FOR_REVIEW);
-        assertThat(quotation.getRfq().getStatus()).isEqualTo(RfqStatus.DRAFT);
+        assertThat(quotation.getRfq().getStatus()).isEqualTo(RfqStatus.UNDER_ANALYSIS);
+    }
+
+    @Test
+    @DisplayName("deveAprovarQuotationEmReadyForReview")
+    void deveAprovarQuotationEmReadyForReview() {
+        Quotation quotation = persistedDraftQuotation();
+        quotation.setStatus(QuotationStatus.READY_FOR_REVIEW);
+        when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+        when(userRepository.findByIdAndTenantId(userId, tenantId)).thenReturn(Optional.of(user));
+        when(quotationRepository.save(quotation)).thenReturn(quotation);
+        when(quotationRepository.countByRfqIdsAndTenantId(List.of(rfqId), tenantId)).thenReturn(List.of());
+
+        var response = quotationService.approve(quotation.getId(), tenantId, userId);
+
+        assertThat(response.status()).isEqualTo(QuotationStatus.APPROVED);
+        assertThat(quotation.getApprovedAt()).isNotNull();
+        assertThat(quotation.getApprovedBy()).isEqualTo(user);
+    }
+
+    @Test
+    @DisplayName("deveEnviarQuotationAprovadaEMarcarRfqComoQuoted")
+    void deveEnviarQuotationAprovadaEMarcarRfqComoQuoted() {
+        Quotation quotation = persistedDraftQuotation();
+        quotation.setStatus(QuotationStatus.APPROVED);
+        when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+        when(userRepository.findByIdAndTenantId(userId, tenantId)).thenReturn(Optional.of(user));
+        when(quotationRepository.save(quotation)).thenReturn(quotation);
+        when(quotationRepository.countByRfqIdsAndTenantId(List.of(rfqId), tenantId)).thenReturn(List.of());
+
+        var response = quotationService.send(quotation.getId(), tenantId, userId);
+
+        assertThat(response.status()).isEqualTo(QuotationStatus.SENT);
+        assertThat(quotation.getSentAt()).isNotNull();
+        assertThat(quotation.getSentBy()).isEqualTo(user);
+        assertThat(quotation.getRfq().getStatus()).isEqualTo(RfqStatus.QUOTED);
+    }
+
+    @Test
+    @DisplayName("deveBloquearSendQuandoRfqEstaEmDraft")
+    void deveBloquearSendQuandoRfqEstaEmDraft() {
+        assertSendBlockedForRfqStatus(RfqStatus.DRAFT);
+    }
+
+    @Test
+    @DisplayName("deveBloquearSendQuandoRfqEstaEmSubmitted")
+    void deveBloquearSendQuandoRfqEstaEmSubmitted() {
+        assertSendBlockedForRfqStatus(RfqStatus.SUBMITTED);
+    }
+
+    @Test
+    @DisplayName("deveBloquearSendQuandoRfqEstaEmQuoted")
+    void deveBloquearSendQuandoRfqEstaEmQuoted() {
+        assertSendBlockedForRfqStatus(RfqStatus.QUOTED);
+    }
+
+    @Test
+    @DisplayName("deveBloquearSendQuandoRfqEstaEmCancelled")
+    void deveBloquearSendQuandoRfqEstaEmCancelled() {
+        assertSendBlockedForRfqStatus(RfqStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("deveBloquearSendQuandoRfqEstaEmExpired")
+    void deveBloquearSendQuandoRfqEstaEmExpired() {
+        assertSendBlockedForRfqStatus(RfqStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("deveBloquearSendQuandoQuotationNaoEstaApproved")
+    void deveBloquearSendQuandoQuotationNaoEstaApproved() {
+        Quotation quotation = persistedDraftQuotation();
+        quotation.setStatus(QuotationStatus.READY_FOR_REVIEW);
+        when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+
+        assertThatThrownBy(() -> quotationService.send(quotation.getId(), tenantId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("APPROVED");
+
+        assertThat(quotation.getStatus()).isEqualTo(QuotationStatus.READY_FOR_REVIEW);
+        assertThat(quotation.getRfq().getStatus()).isEqualTo(RfqStatus.UNDER_ANALYSIS);
+        verify(quotationRepository, never()).save(any(Quotation.class));
+    }
+
+    @Test
+    @DisplayName("sentBloqueiaEdicaoDeCabecalhoEItensECancelamento")
+    void sentBloqueiaEdicaoDeCabecalhoEItensECancelamento() {
+        Quotation quotation = persistedDraftQuotation();
+        QuotationItem item = buildItem(quotation);
+        quotation.addItem(item);
+        quotation.setStatus(QuotationStatus.SENT);
+        when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+
+        assertThatThrownBy(() -> quotationService.update(quotation.getId(), new com.freightflow.modules.commercial.quotation.dto.UpdateQuotationRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null, null
+        ), tenantId)).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("DRAFT");
+
+        assertThatThrownBy(() -> quotationService.addItem(quotation.getId(), validItemRequest(), tenantId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("DRAFT");
+
+        assertThatThrownBy(() -> quotationService.updateItem(quotation.getId(), item.getId(), new UpdateQuotationItemRequest(
+                null, null, null, null, null, null, null, new BigDecimal("200"),
+                BigDecimal.ONE, null, null, null, null, null, null
+        ), tenantId)).isInstanceOf(BusinessException.class)
+                .hasMessageContaining("DRAFT");
+
+        assertThatThrownBy(() -> quotationService.deleteItem(quotation.getId(), item.getId(), tenantId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("DRAFT");
+
+        assertThatThrownBy(() -> quotationService.cancel(quotation.getId(), tenantId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("cannot be cancelled");
+    }
+
+    @Test
+    @DisplayName("sentBloqueiaApproveNovamenteESendNovamente")
+    void sentBloqueiaApproveNovamenteESendNovamente() {
+        Quotation quotation = persistedDraftQuotation();
+        quotation.setStatus(QuotationStatus.SENT);
+        when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+
+        assertThatThrownBy(() -> quotationService.approve(quotation.getId(), tenantId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("READY_FOR_REVIEW");
+
+        assertThatThrownBy(() -> quotationService.send(quotation.getId(), tenantId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("APPROVED");
     }
 
     @Test
@@ -339,6 +469,23 @@ class QuotationServiceTest {
         Quotation quotation = new Quotation(tenant, rfq, "Q-001", "USD", user);
         assignQuotationGraphIds(quotation);
         return quotation;
+    }
+
+    private void assertSendBlockedForRfqStatus(RfqStatus rfqStatus) {
+        Quotation quotation = persistedDraftQuotation();
+        quotation.setStatus(QuotationStatus.APPROVED);
+        quotation.getRfq().setStatus(rfqStatus);
+        when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+
+        assertThatThrownBy(() -> quotationService.send(quotation.getId(), tenantId, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("UNDER_ANALYSIS");
+
+        assertThat(quotation.getStatus()).isEqualTo(QuotationStatus.APPROVED);
+        assertThat(quotation.getSentAt()).isNull();
+        assertThat(quotation.getSentBy()).isNull();
+        assertThat(quotation.getRfq().getStatus()).isEqualTo(rfqStatus);
+        verify(quotationRepository, never()).save(any(Quotation.class));
     }
 
     private QuotationItem buildItem(Quotation quotation) {

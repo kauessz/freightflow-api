@@ -2,6 +2,7 @@ package com.freightflow.modules.customer;
 
 import com.freightflow.modules.auth.Tenant;
 import com.freightflow.modules.auth.TenantRepository;
+import com.freightflow.modules.auth.UserRepository;
 import com.freightflow.modules.customer.dto.CreateCustomerRequest;
 import com.freightflow.modules.customer.dto.CustomerResponse;
 import com.freightflow.modules.customer.dto.UpdateCustomerRequest;
@@ -24,10 +25,14 @@ public class CustomerService {
 
     private final CustomerRepository customerRepository;
     private final TenantRepository tenantRepository;
+    private final UserRepository userRepository;
 
-    public CustomerService(CustomerRepository customerRepository, TenantRepository tenantRepository) {
+    public CustomerService(CustomerRepository customerRepository,
+                           TenantRepository tenantRepository,
+                           UserRepository userRepository) {
         this.customerRepository = customerRepository;
         this.tenantRepository = tenantRepository;
+        this.userRepository = userRepository;
     }
 
     // ==================== Queries ====================
@@ -88,6 +93,9 @@ public class CustomerService {
         log.info("Deleting customer id={}", id);
         Customer customer = customerRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer", id));
+        if (userRepository.existsByTenantIdAndCustomerId(tenantId, id)) {
+            throw new BusinessException("Customer cannot be deleted while it is linked to active users");
+        }
         customerRepository.delete(customer);
     }
 }

@@ -2,6 +2,10 @@ package com.freightflow.modules.commercial;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.freightflow.config.TestSecurityConfig;
+import com.freightflow.modules.commercial.client.quotation.ClientQuotationController;
+import com.freightflow.modules.commercial.client.quotation.ClientQuotationService;
+import com.freightflow.modules.commercial.client.rfq.ClientRfqController;
+import com.freightflow.modules.commercial.client.rfq.ClientRfqService;
 import com.freightflow.modules.commercial.quotation.QuotationController;
 import com.freightflow.modules.commercial.quotation.QuotationService;
 import com.freightflow.modules.commercial.rfq.RfqController;
@@ -31,7 +35,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {RfqController.class, QuotationController.class})
+@WebMvcTest(controllers = {
+        RfqController.class,
+        QuotationController.class,
+        ClientRfqController.class,
+        ClientQuotationController.class
+})
 @Import({TestSecurityConfig.class, GlobalExceptionHandler.class, CommercialControllerSecurityTest.RoleAspectTestConfig.class})
 @AutoConfigureMockMvc(addFilters = true)
 @DisplayName("Commercial controller security")
@@ -51,6 +60,8 @@ class CommercialControllerSecurityTest {
 
     @MockBean private RfqService rfqService;
     @MockBean private QuotationService quotationService;
+    @MockBean private ClientRfqService clientRfqService;
+    @MockBean private ClientQuotationService clientQuotationService;
 
     private UserPrincipal principal(String role) {
         return new UserPrincipal(UUID.randomUUID(), role.toLowerCase() + "@tenant.com", null, UUID.randomUUID(), role, null);
@@ -103,6 +114,27 @@ class CommercialControllerSecurityTest {
     }
 
     @Test
+    @DisplayName("clientPodeAcessarEndpointsDoPortal")
+    void clientPodeAcessarEndpointsDoPortal() throws Exception {
+        mockMvc.perform(get("/api/v1/client/rfqs").with(user(principal("CLIENT"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/client/quotations").with(user(principal("CLIENT"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("rolesInternasNaoGanhamAcessoAoPortalClient")
+    void rolesInternasNaoGanhamAcessoAoPortalClient() throws Exception {
+        mockMvc.perform(get("/api/v1/client/rfqs").with(user(principal("ADMIN"))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/client/rfqs").with(user(principal("OPERATOR"))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/client/rfqs").with(user(principal("VIEWER"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("operatorPodeCriarCotacao")
     void operatorPodeCriarCotacao() throws Exception {
         String body = """
@@ -118,6 +150,34 @@ class CommercialControllerSecurityTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("operatorNaoPodeAprovarNemEnviarCotacao")
+    void operatorNaoPodeAprovarNemEnviarCotacao() throws Exception {
+        mockMvc.perform(post("/api/v1/commercial/quotations/{id}/approve", UUID.randomUUID())
+                        .with(csrf())
+                        .with(user(principal("OPERATOR"))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/commercial/quotations/{id}/send", UUID.randomUUID())
+                        .with(csrf())
+                        .with(user(principal("OPERATOR"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("adminPodeAprovarEEnviarCotacao")
+    void adminPodeAprovarEEnviarCotacao() throws Exception {
+        mockMvc.perform(post("/api/v1/commercial/quotations/{id}/approve", UUID.randomUUID())
+                        .with(csrf())
+                        .with(user(principal("ADMIN"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/commercial/quotations/{id}/send", UUID.randomUUID())
+                        .with(csrf())
+                        .with(user(principal("ADMIN"))))
+                .andExpect(status().isOk());
     }
 
     @Test

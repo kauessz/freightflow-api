@@ -37,6 +37,7 @@ public record QuotationResponse(
         Instant approvedAt,
         Instant rejectedAt,
         Instant expiredAt,
+        Instant sentAt,
         Instant createdAt,
         Instant updatedAt,
         List<QuotationItemResponse> items
@@ -71,6 +72,7 @@ public record QuotationResponse(
                 quotation.getApprovedAt(),
                 quotation.getRejectedAt(),
                 quotation.getExpiredAt(),
+                quotation.getSentAt(),
                 quotation.getCreatedAt(),
                 quotation.getUpdatedAt(),
                 quotation.getItems().stream().map(QuotationItemResponse::from).toList()
