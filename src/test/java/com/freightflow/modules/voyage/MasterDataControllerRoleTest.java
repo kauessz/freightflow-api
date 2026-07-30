@@ -26,11 +26,17 @@ class MasterDataControllerRoleTest {
     }
 
     @Test
-    @DisplayName("should_allow_client_only_on_readinessAndFleetMapReads")
-    void should_allow_client_only_on_readinessAndFleetMapReads() throws Exception {
+    @DisplayName("should_allow_client_on_portReads_and_selectedOperationalReads")
+    void should_allow_client_on_portReads_and_selectedOperationalReads() throws Exception {
         assertThat(roles(VesselController.class, "getActiveWithShipments")).contains("CLIENT");
         assertThat(roles(VoyageController.class, "listFleetMapReadiness")).contains("CLIENT");
+        assertThat(roles(PortController.class, "list")).contains("CLIENT");
+        assertThat(roles(PortController.class, "getById")).contains("CLIENT");
+        assertThat(roles(PortController.class, "getByUnlocode")).contains("CLIENT");
+        assertThat(roles(PortController.class, "listByCountry")).contains("CLIENT");
+        assertThat(roles(PortController.class, "search")).contains("CLIENT");
         assertThat(roles(PortController.class, "create")).doesNotContain("CLIENT");
+        assertThat(roles(PortController.class, "update")).doesNotContain("CLIENT");
         assertThat(roles(VesselController.class, "create")).doesNotContain("CLIENT");
         assertThat(roles(VoyageController.class, "create")).doesNotContain("CLIENT");
     }
