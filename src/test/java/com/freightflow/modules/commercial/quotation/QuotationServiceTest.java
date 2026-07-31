@@ -46,6 +46,7 @@ import static org.mockito.Mockito.when;
 class QuotationServiceTest {
 
     @Mock private QuotationRepository quotationRepository;
+    @Mock private QuotationItemRepository quotationItemRepository;
     @Mock private RfqRepository rfqRepository;
     @Mock private TenantRepository tenantRepository;
     @Mock private UserRepository userRepository;
@@ -83,6 +84,7 @@ class QuotationServiceTest {
         rfq.replaceContainerRequirements(List.of(new com.freightflow.modules.commercial.rfq.RfqContainerRequirement(com.freightflow.modules.commercial.rfq.enums.RfqContainerType.DRY_20, 1)));
         quotationService = new QuotationService(
                 quotationRepository,
+                quotationItemRepository,
                 rfqRepository,
                 tenantRepository,
                 userRepository,
@@ -145,15 +147,15 @@ class QuotationServiceTest {
 
         assertThatThrownBy(() -> quotationService.create(rfqId, new CreateQuotationRequest(
                 "Q-001",
-                Instant.parse("2026-07-30T10:00:00Z"),
+                Instant.parse("2026-08-30T10:00:00Z"),
                 "MSC",
                 -1,
                 7,
-                Instant.parse("2026-07-24T10:00:00Z"),
-                Instant.parse("2026-08-10T10:00:00Z"),
+                Instant.parse("2026-08-24T10:00:00Z"),
+                Instant.parse("2026-09-10T10:00:00Z"),
                 "USD",
                 new BigDecimal("5.1234"),
-                Instant.parse("2026-07-20T10:00:00Z"),
+                Instant.parse("2026-08-20T10:00:00Z"),
                 "MANUAL",
                 "Commercial notes",
                 "Internal notes"
@@ -166,6 +168,11 @@ class QuotationServiceTest {
     void deveAdicionarItemERecalcularTotais() {
         Quotation quotation = persistedDraftQuotation();
         when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+        when(quotationItemRepository.save(any(QuotationItem.class))).thenAnswer(invocation -> {
+            QuotationItem item = invocation.getArgument(0);
+            ReflectionTestUtils.setField(item, "id", UUID.randomUUID());
+            return item;
+        });
         when(quotationRepository.save(quotation)).thenAnswer(invocation -> {
             assignQuotationGraphIds(quotation);
             return quotation;
@@ -185,6 +192,13 @@ class QuotationServiceTest {
     void deveExcluirItemOpcionalDoTotal() {
         Quotation quotation = persistedDraftQuotation();
         when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+        when(quotationItemRepository.save(any(QuotationItem.class))).thenAnswer(invocation -> {
+            QuotationItem item = invocation.getArgument(0);
+            if (item.getId() == null) {
+                ReflectionTestUtils.setField(item, "id", UUID.randomUUID());
+            }
+            return item;
+        });
         when(quotationRepository.save(quotation)).thenAnswer(invocation -> {
             assignQuotationGraphIds(quotation);
             return quotation;
@@ -209,6 +223,11 @@ class QuotationServiceTest {
         Quotation quotation = persistedDraftQuotation();
         quotation.setExchangeRate(new BigDecimal("5.4321"));
         when(quotationRepository.findByIdAndTenantId(quotation.getId(), tenantId)).thenReturn(Optional.of(quotation));
+        when(quotationItemRepository.save(any(QuotationItem.class))).thenAnswer(invocation -> {
+            QuotationItem item = invocation.getArgument(0);
+            ReflectionTestUtils.setField(item, "id", UUID.randomUUID());
+            return item;
+        });
         when(quotationRepository.save(quotation)).thenAnswer(invocation -> {
             assignQuotationGraphIds(quotation);
             return quotation;
@@ -430,15 +449,15 @@ class QuotationServiceTest {
     private CreateQuotationRequest validQuotationRequest() {
         return new CreateQuotationRequest(
                 "Q-001",
-                Instant.parse("2026-07-30T10:00:00Z"),
+                Instant.parse("2026-08-30T10:00:00Z"),
                 "MSC",
                 18,
                 7,
-                Instant.parse("2026-07-24T10:00:00Z"),
-                Instant.parse("2026-08-10T10:00:00Z"),
+                Instant.parse("2026-08-24T10:00:00Z"),
+                Instant.parse("2026-09-10T10:00:00Z"),
                 "usd",
                 new BigDecimal("5.1234"),
-                Instant.parse("2026-07-20T10:00:00Z"),
+                Instant.parse("2026-08-20T10:00:00Z"),
                 "MANUAL",
                 "Commercial notes",
                 "Internal notes"

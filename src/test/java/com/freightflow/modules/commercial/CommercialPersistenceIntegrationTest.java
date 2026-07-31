@@ -6,6 +6,10 @@ import com.freightflow.modules.auth.TenantRepository;
 import com.freightflow.modules.auth.User;
 import com.freightflow.modules.auth.UserRepository;
 import com.freightflow.modules.commercial.quotation.Quotation;
+import com.freightflow.modules.commercial.quotation.QuotationService;
+import com.freightflow.modules.commercial.quotation.dto.CreateQuotationItemRequest;
+import com.freightflow.modules.commercial.quotation.enums.ChargeCategory;
+import com.freightflow.modules.commercial.quotation.enums.ChargeScope;
 import com.freightflow.modules.commercial.quotation.QuotationRepository;
 import com.freightflow.modules.commercial.rfq.RequestForQuotation;
 import com.freightflow.modules.commercial.rfq.RfqRepository;
@@ -26,6 +30,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +45,7 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
     @Autowired private PortRepository portRepository;
     @Autowired private RfqRepository rfqRepository;
     @Autowired private QuotationRepository quotationRepository;
+    @Autowired private QuotationService quotationService;
     @Autowired private CustomerRepository customerRepository;
     @Autowired private PlatformTransactionManager transactionManager;
 
@@ -47,6 +53,70 @@ class CommercialPersistenceIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("deveAplicarFkCompostaPorTenantNaPersistenciaDeQuotation")
     void deveAplicarFkCompostaPorTenantNaPersistenciaDeQuotation() {
         executeCrossTenantConstraintScenario("X");
+    }
+
+    @Test
+    @DisplayName("devePersistirPrimeiroItemDaQuotationSemTransientObjectException")
+    void devePersistirPrimeiroItemDaQuotationSemTransientObjectException() {
+        Tenant tenant = tenantRepository.save(new Tenant("Tenant Item", "tenant-item", "item@test.com", "FREE"));
+        User user = userRepository.save(new User("User Item", "user-item@test.com", "hash", User.UserRole.ADMIN, tenant));
+
+        Port origin = portRepository.save(new Port("BRIT1", "Santos Item", "BR", "America/Sao_Paulo", null, null));
+        Port destination = portRepository.save(new Port("NLIT1", "Rotterdam Item", "NL", "Europe/Amsterdam", null, null));
+
+        RequestForQuotation rfq = new RequestForQuotation(
+                tenant,
+                "RFQ-ITEM-1",
+                "Maria",
+                RfqDirection.EXPORT,
+                RfqTransportMode.OCEAN,
+                RfqServiceType.LCL,
+                origin,
+                destination,
+                user
+        );
+        rfq.setContactEmail("maria-item@test.com");
+        rfq.setProspectCompanyName("Prospect Item");
+        rfq.setStatus(RfqStatus.UNDER_ANALYSIS);
+        rfq = rfqRepository.saveAndFlush(rfq);
+
+        Quotation quotation = quotationRepository.saveAndFlush(
+                new Quotation(tenant, rfq, "Q-ITEM-1", "USD", user)
+        );
+
+        var response = quotationService.addItem(
+                quotation.getId(),
+                new CreateQuotationItemRequest(
+                        ChargeCategory.OCEAN_FREIGHT,
+                        "Ocean freight",
+                        ChargeScope.MAIN_CARRIAGE,
+                        "USD",
+                        new BigDecimal("100.00"),
+                        null,
+                        "USD",
+                        new BigDecimal("150.00"),
+                        BigDecimal.ONE,
+                        "BL",
+                        true,
+                        false,
+                        "MSC",
+                        "Main charge",
+                        0
+                ),
+                tenant.getId()
+        );
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.costTotal()).isEqualByComparingTo("100.00");
+        assertThat(response.sellingTotal()).isEqualByComparingTo("150.00");
+        assertThat(response.profitAmount()).isEqualByComparingTo("50.00");
+
+        Integer itemCount = executeInRequiresNew(() -> {
+            Quotation persisted = quotationRepository.findById(quotation.getId()).orElseThrow();
+            assertThat(persisted.getItems().get(0).getDescription()).isEqualTo("Ocean freight");
+            return persisted.getItems().size();
+        });
+        assertThat(itemCount).isEqualTo(1);
     }
 
     @Test

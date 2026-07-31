@@ -153,6 +153,33 @@ class CommercialControllerSecurityTest {
     }
 
     @Test
+    @DisplayName("payloadInvalidoAoAdicionarItemRetorna400")
+    void payloadInvalidoAoAdicionarItemRetorna400() throws Exception {
+        String invalidBody = """
+                {
+                  "description":"",
+                  "category":"OCEAN_FREIGHT",
+                  "scope":"MAIN_CARRIAGE",
+                  "costCurrency":"USD",
+                  "costAmount":100,
+                  "sellingCurrency":"USD",
+                  "sellingAmount":150,
+                  "quantity":0,
+                  "included":true,
+                  "optional":false,
+                  "sortOrder":0
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/commercial/quotations/{id}/items", UUID.randomUUID())
+                        .with(csrf())
+                        .with(user(principal("OPERATOR")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("operatorNaoPodeAprovarNemEnviarCotacao")
     void operatorNaoPodeAprovarNemEnviarCotacao() throws Exception {
         mockMvc.perform(post("/api/v1/commercial/quotations/{id}/approve", UUID.randomUUID())

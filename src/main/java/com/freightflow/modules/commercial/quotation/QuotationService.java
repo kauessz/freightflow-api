@@ -37,17 +37,20 @@ public class QuotationService {
     private static final Logger log = LoggerFactory.getLogger(QuotationService.class);
 
     private final QuotationRepository quotationRepository;
+    private final QuotationItemRepository quotationItemRepository;
     private final RfqRepository rfqRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final QuotationFinancialCalculator financialCalculator;
 
     public QuotationService(QuotationRepository quotationRepository,
+                            QuotationItemRepository quotationItemRepository,
                             RfqRepository rfqRepository,
                             TenantRepository tenantRepository,
                             UserRepository userRepository,
                             QuotationFinancialCalculator financialCalculator) {
         this.quotationRepository = quotationRepository;
+        this.quotationItemRepository = quotationItemRepository;
         this.rfqRepository = rfqRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
@@ -152,6 +155,7 @@ public class QuotationService {
         quotation.addItem(item);
         sortItems(quotation);
         recalculateTotals(quotation);
+        quotationItemRepository.save(item);
         Quotation saved = quotationRepository.save(quotation);
         return QuotationResponse.from(saved, quotationCountForRfq(tenantId, saved.getRfq().getId()));
     }
