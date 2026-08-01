@@ -1287,3 +1287,36 @@ flowchart TD
 - direct schema implementation in this round
 - changes to V25 or V26
 - production endpoint implementation in this round
+
+## 24. Effective Phase B Decisions
+
+As of Saturday, August 1, 2026, the backend implementation for Phase B adopts these concrete choices:
+
+- `platform_features.feature_key` is the primary key.
+  This keeps feature identifiers stable and discourages technical renames that would weaken the catalog contract.
+- `subscription_plans.id` remains UUID, while `code` is the stable lookup key for API consumers.
+- `platform_features` includes `implementation_status` with:
+  - `AVAILABLE`
+  - `PARTIAL`
+  - `PLANNED`
+- `CUSTOM` is seeded as `DRAFT` without predefined entitlements.
+  This avoids implying a sellable ready-made contract before a future platform mutation flow exists.
+- `PLANNED` features remain in the catalog and dependency graph, but are not seeded as enabled entitlements inside `ACTIVE` plans.
+  This keeps the roadmap visible without advertising a non-functional module as contractually usable.
+- `STARTER` does not seed `MAX_CLIENT_USERS`.
+  In Phase B there is no tenant subscription assignment yet, and the plan should not imply client-user capacity without a corresponding commercial/client capability in the package.
+- `plan_entitlements` stores only persisted rows for granted capabilities and limits.
+  The read-only API composes the full catalog matrix by returning disabled entries for features that have no row in a given plan.
+- `limit_value = null` for `INTEGER_LIMIT` means unlimited.
+  `null` is never used as a hidden sentinel for BOOLEAN features.
+- `plan_entitlements.enabled` is kept intentionally.
+  In Phase B all seeded rows use `enabled=true`, and absence of a row means "not granted". The boolean remains in the schema because future override and explicit-disable flows may need to distinguish absence from an intentional disabled state.
+- dependency validation is performed in the service layer.
+  PostgreSQL constraints cover FK integrity, canonical keys, non-negative numeric values, and self-dependency prevention, but cannot safely express cross-table `value_type` rules without extra procedural logic.
+- Phase B remains read-only.
+  There is still:
+  - no tenant subscription;
+  - no plan assignment to tenant;
+  - no entitlement resolver;
+  - no runtime enforcement on operational endpoints;
+  - no billing behavior.

@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -30,6 +32,14 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         detail.setTitle("Business Rule Violation");
         detail.setType(URI.create("https://api.freightflow.com/errors/conflict"));
+        return detail;
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ProblemDetail handleBadRequest(BadRequestException ex, WebRequest request) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        detail.setTitle("Bad Request");
+        detail.setType(URI.create("https://api.freightflow.com/errors/bad-request"));
         return detail;
     }
 
@@ -69,6 +79,24 @@ public class GlobalExceptionHandler {
             "A operação não pôde ser concluída porque os dados informados entram em conflito com um registro existente.");
         detail.setTitle("Conflict");
         detail.setType(URI.create("https://api.freightflow.com/errors/conflict"));
+        return detail;
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ProblemDetail handleMethodNotSupported(HttpRequestMethodNotSupportedException ex, WebRequest request) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.METHOD_NOT_ALLOWED,
+                "The requested HTTP method is not available for this endpoint.");
+        detail.setTitle("Method Not Allowed");
+        detail.setType(URI.create("https://api.freightflow.com/errors/method-not-allowed"));
+        return detail;
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex, WebRequest request) {
+        String message = "Invalid value for parameter '%s'.".formatted(ex.getName());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, message);
+        detail.setTitle("Bad Request");
+        detail.setType(URI.create("https://api.freightflow.com/errors/bad-request"));
         return detail;
     }
 
