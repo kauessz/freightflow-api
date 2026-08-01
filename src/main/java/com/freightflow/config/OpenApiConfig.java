@@ -33,6 +33,12 @@ public class OpenApiConfig {
                                         .type(SecurityScheme.Type.HTTP)
                                         .bearerFormat("JWT")
                                         .scheme("bearer")
-                                        .description("Insira o JWT token obtido via /api/v1/auth/login")));
+                                        .description("Insira o JWT token obtido via /api/v1/auth/login"))
+                        .addSecuritySchemes("Platform Bearer Authentication",
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .bearerFormat("JWT")
+                                        .scheme("bearer")
+                                        .description("Insira o JWT de plataforma obtido via /api/v1/platform/auth/login. Este token nao concede acesso a endpoints tenant.")));
     }
 }

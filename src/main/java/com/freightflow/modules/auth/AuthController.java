@@ -12,7 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -54,7 +54,10 @@ public class AuthController {
     @SecurityRequirement(name = "Bearer Authentication")
     @Operation(summary = "Get current user profile",
                description = "Returns the authenticated user profile and tenant information.")
-    public ResponseEntity<UserResponse> me(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<UserResponse> me(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+            throw new com.freightflow.shared.exception.UnauthorizedException("Authentication required");
+        }
         UserResponse response = authService.me(principal.getId());
         return ResponseEntity.ok(response);
     }

@@ -20,6 +20,8 @@ public class DatabaseCleaner {
 
     // Tabelas de domínio explícitas para garantir limpeza após novas migrations.
     private static final String[] TABLES = {
+        "platform_bootstrap_state",
+        "platform_users",
         "commercial_quotation_items",
         "commercial_quotations",
         "commercial_rfq_containers",
