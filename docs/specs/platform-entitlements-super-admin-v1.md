@@ -1419,3 +1419,135 @@ Next expected step after Phase C:
 
 - introduce tenant entitlement resolution over plan + future overrides
 - keep enforcement off by default until a later phase explicitly activates it
+
+## 26. Phase D — Tenant Entitlement Resolver
+
+As of Sunday, August 2, 2026, Phase D adds a read-only tenant entitlement resolver for platform diagnostics without introducing new database schema, billing, overrides, usage counters, or runtime enforcement.
+
+Database and source-of-truth rule in this phase:
+
+- no new migration is required
+- `V28__create_platform_catalog.sql` remains unchanged
+- `V29__create_tenant_subscriptions.sql` remains unchanged
+- the resolver uses only:
+  - `tenant_subscriptions`
+  - `subscription_plans`
+  - `plan_entitlements`
+  - `platform_features`
+  - `platform_feature_dependencies`
+- legacy `tenants.plan` is explicitly ignored as a fallback source
+
+Open subscription rule reused from Phase C:
+
+- `status IN ('ACTIVE', 'SUSPENDED')`
+- `ended_at IS NULL`
+
+If more than one open subscription is found for a tenant, the resolver must not silently choose one by date. It must respond conservatively with diagnostics and disable effective access.
+Normal writes remain protected by the Phase C partial unique index `uq_tenant_subscriptions_one_open` from `V29__create_tenant_subscriptions.sql`, so this state is treated as a diagnosable inconsistency rather than normal flow.
+
+Platform endpoint introduced:
+
+- `GET /api/v1/platform/tenants/{tenantId}/entitlements`
+
+Security boundary:
+
+- only platform JWTs may call the endpoint
+- tenant JWTs are rejected with `401`
+- missing token is rejected with `401`
+- malformed `tenantId` returns sanitized `400`
+- unknown tenant returns sanitized `404`
+
+Response semantics:
+
+- `accessStatus = ACTIVE`
+  - the tenant has exactly one open subscription in `ACTIVE`
+  - plan grants may become effectively usable if all other rules pass
+- `accessStatus = SUSPENDED`
+  - the tenant has exactly one open subscription in `SUSPENDED`
+  - `grantedByPlan` remains visible for diagnostics
+  - `effectiveEnabled` is forced to `false` for every feature
+- `accessStatus = NO_SUBSCRIPTION`
+  - the tenant exists and truly has no open subscription
+  - `subscription = null`
+  - all features remain listed for diagnostics with `grantedByPlan = false` and `effectiveEnabled = false`
+- `accessStatus = INCONSISTENT_SUBSCRIPTION`
+  - more than one open subscription was found
+  - no subscription row is selected as authoritative
+  - `subscription = null`
+  - all features remain listed for diagnostics with `grantedByPlan = false`, `effectiveEnabled = false`, `limitValue = null`, and `unlimited = false`
+  - the response includes a sanitized warning without conflicting subscription identifiers
+
+Feature resolution rules in this phase:
+
+- `grantedByPlan = true` only when the open subscription points to a plan entitlement row with `enabled = true`
+- `grantedByPlan = false` when the feature is absent from the plan or explicitly disabled
+- `effectiveEnabled = true` requires all of:
+  - `accessStatus = ACTIVE`
+  - a uniquely resolved open subscription
+  - plan status `ACTIVE`
+  - feature catalog row exists
+  - feature `active = true`
+  - feature `implementation_status != PLANNED`
+  - entitlement data is internally consistent
+  - all required dependencies are themselves effectively enabled
+- `implementation_status = PARTIAL`
+  - does not block effective access by itself
+  - must emit a warning
+- `implementation_status = PLANNED`
+  - forces `effectiveEnabled = false`
+  - must emit a warning
+- inactive catalog feature
+  - forces `effectiveEnabled = false`
+  - must emit a warning
+
+Limit semantics:
+
+- `BOOLEAN`
+  - `limitValue = null`
+  - `unlimited = false`
+- `INTEGER_LIMIT` with entitlement enabled and numeric `limit_value`
+  - `limitValue = <number>`
+  - `unlimited = false`
+- `INTEGER_LIMIT` with entitlement enabled and `limit_value = null`
+  - `limitValue = null`
+  - `unlimited = true`
+- `INTEGER_LIMIT` when `effectiveEnabled = false`
+  - `limitValue` may remain visible as contractual diagnosis
+  - `unlimited = false`
+- disabled or absent feature
+  - `unlimited = false`
+
+Dependency semantics:
+
+- dependencies are loaded in batch from `platform_feature_dependencies`
+- dependency resolution is transitive, not only one level deep
+- response includes:
+  - `dependencies`
+  - `unmetDependencies`
+- a feature with any unmet required dependency becomes effectively disabled
+- dependency cycles must not produce `500`
+- cycle-affected features must be disabled conservatively and annotated with warnings
+
+Diagnostic consistency rules:
+
+The resolver must not raise `500` for catalog or contract inconsistencies that can be reported safely, including:
+
+- non-active plan attached to an open subscription
+- planned feature granted by plan
+- inactive feature granted by plan
+- missing or ineffective dependency
+- dependency cycle
+- inconsistent entitlement shape such as a `BOOLEAN` grant with `limitValue`
+
+Instead, the resolver returns a conservative decision plus warnings in the platform-only response.
+
+Still out of scope after Phase D:
+
+- runtime enforcement in operational endpoints
+- shipment, document, RFQ, quotation, voyage, or tracking blocking
+- feature-gate middleware or interceptors
+- per-tenant overrides
+- usage counters or limit consumption
+- billing, checkout, invoicing, or payment providers
+- tenant self-service plan changes
+- portal or frontend implementation
