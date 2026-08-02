@@ -100,6 +100,8 @@ public class DatabaseCleaner {
 
     // Tabelas de domínio explícitas para garantir limpeza após novas migrations.
     private static final String[] TABLES = {
+        "tenant_subscription_events",
+        "tenant_subscriptions",
         "plan_entitlements",
         "platform_feature_dependencies",
         "subscription_plans",

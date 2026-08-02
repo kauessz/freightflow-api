@@ -1320,3 +1320,102 @@ As of Saturday, August 1, 2026, the backend implementation for Phase B adopts th
   - no entitlement resolver;
   - no runtime enforcement on operational endpoints;
   - no billing behavior.
+
+## 25. Phase C — Tenant Subscription Foundation
+
+As of Saturday, August 1, 2026, Phase C adds the first normalized tenant-plan assignment layer without introducing runtime feature enforcement.
+
+Implemented database layer:
+
+- `V29__create_tenant_subscriptions.sql`
+- `tenant_subscriptions`
+- `tenant_subscription_events`
+
+`tenant_subscriptions` stores the current and historical contract state of one tenant against one seeded plan from `subscription_plans`.
+
+Columns introduced:
+
+- `tenant_id`
+- `plan_id`
+- `status`
+- `started_at`
+- `ended_at`
+- `reason`
+- `internal_notes`
+- `created_at`
+- `updated_at`
+
+Status values in this phase:
+
+- `ACTIVE`
+- `SUSPENDED`
+- `CANCELLED`
+
+Open subscription concept in Phase C:
+
+- `status IN ('ACTIVE', 'SUSPENDED')`
+- `ended_at IS NULL`
+
+This phase enforces at most one open subscription per tenant through a PostgreSQL partial unique index.
+
+Event trail introduced:
+
+- `SUBSCRIPTION_ASSIGNED`
+- `PLAN_CHANGED`
+- `SUBSCRIPTION_SUSPENDED`
+- `SUBSCRIPTION_REACTIVATED`
+- `SUBSCRIPTION_CANCELLED`
+
+Platform endpoints introduced:
+
+- `GET /api/v1/platform/tenants/{tenantId}/subscription`
+- `GET /api/v1/platform/tenants/{tenantId}/subscription/history`
+- `POST /api/v1/platform/tenants/{tenantId}/subscription/assign`
+- `POST /api/v1/platform/tenants/{tenantId}/subscription/change-plan`
+- `POST /api/v1/platform/tenants/{tenantId}/subscription/suspend`
+- `POST /api/v1/platform/tenants/{tenantId}/subscription/reactivate`
+- `POST /api/v1/platform/tenants/{tenantId}/subscription/cancel`
+
+Rules implemented in this phase:
+
+- assign requires tenant existence, `planCode`, plan existence, and `ACTIVE` catalog status
+- assign rejects tenants that already have an open `ACTIVE` or `SUSPENDED` subscription
+- change-plan requires an open `ACTIVE` subscription
+- change-plan closes the old row as `CANCELLED` with `ended_at`
+- change-plan creates a fresh `ACTIVE` row for the new plan
+- suspend transitions `ACTIVE -> SUSPENDED` without closing the row
+- reactivate transitions `SUSPENDED -> ACTIVE` on the same open row
+- cancel transitions `ACTIVE` or `SUSPENDED` to `CANCELLED` and closes the row
+- every mutation emits one normalized subscription event row
+
+Coexistence rule with legacy tenant data:
+
+- `tenants.plan` remains untouched
+- `tenants.plan` is not removed
+- `tenants.plan` is not used as the main source of truth for platform subscription operations in this phase
+
+Still out of scope after Phase C:
+
+- tenant runtime entitlement enforcement
+- operational endpoint blocking
+- plan-based module gating
+- billing
+- pricing
+- checkout
+- invoice lifecycle
+- payment providers
+- frontend or portal work
+- tenant self-service subscription management
+
+Security and contract boundaries:
+
+- all endpoints remain under `/api/v1/platform/**`
+- tenant JWTs cannot access the namespace
+- platform JWTs still do not gain tenant operational access
+- `ProblemDetail` responses remain sanitized
+- `internal_notes` is persisted for platform-only use and is not part of the public tenant-facing API surface
+
+Next expected step after Phase C:
+
+- introduce tenant entitlement resolution over plan + future overrides
+- keep enforcement off by default until a later phase explicitly activates it
