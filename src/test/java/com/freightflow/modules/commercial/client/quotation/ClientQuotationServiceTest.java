@@ -18,6 +18,8 @@ import com.freightflow.modules.commercial.rfq.enums.RfqServiceType;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
 import com.freightflow.modules.customer.Customer;
 import com.freightflow.modules.port.Port;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
+import com.freightflow.modules.platform.entitlement.FeatureNotAvailableException;
 import com.freightflow.shared.exception.ForbiddenException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,12 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +53,7 @@ import static org.mockito.Mockito.when;
 class ClientQuotationServiceTest {
 
     @Mock private QuotationRepository quotationRepository;
+    @Mock private EntitlementEnforcementService entitlementEnforcementService;
 
     @InjectMocks private ClientQuotationService clientQuotationService;
 
@@ -113,6 +122,8 @@ class ClientQuotationServiceTest {
         );
         ReflectionTestUtils.setField(item, "id", UUID.randomUUID());
         quotation.addItem(item);
+
+        lenient().doNothing().when(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
     }
 
     @Test
@@ -124,6 +135,8 @@ class ClientQuotationServiceTest {
 
         assertThatThrownBy(() -> clientQuotationService.getById(quotationId, tenantId, customerId))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
     }
 
     @Test
@@ -139,6 +152,7 @@ class ClientQuotationServiceTest {
         var list = clientQuotationService.list(tenantId, customerId, PageRequest.of(0, 20));
         var detail = clientQuotationService.getById(quotationId, tenantId, customerId);
 
+        verify(entitlementEnforcementService, times(2)).requireEnabled(tenantId, "CLIENT_PORTAL");
         assertThat(list.data()).hasSize(1);
         assertThat(detail.id()).isEqualTo(quotationId.toString());
         assertThat(detail.sellingTotal()).isEqualByComparingTo("150.00");
@@ -149,6 +163,34 @@ class ClientQuotationServiceTest {
     void clientSemCustomerEhRejeitado() {
         assertThatThrownBy(() -> clientQuotationService.list(tenantId, null, PageRequest.of(0, 20)))
                 .isInstanceOf(ForbiddenException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeListagemAntesDaConsulta")
+    void enforcementNegadoImpedeListagemAntesDaConsulta() {
+        doThrow(new FeatureNotAvailableException("CLIENT_PORTAL"))
+                .when(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+
+        assertThatThrownBy(() -> clientQuotationService.list(tenantId, customerId, PageRequest.of(0, 20)))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+        verifyNoInteractions(quotationRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeDetalheAntesDaConsulta")
+    void enforcementNegadoImpedeDetalheAntesDaConsulta() {
+        doThrow(new FeatureNotAvailableException("CLIENT_PORTAL"))
+                .when(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+
+        assertThatThrownBy(() -> clientQuotationService.getById(quotationId, tenantId, customerId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+        verifyNoInteractions(quotationRepository);
     }
 
     @Test
@@ -171,5 +213,9 @@ class ClientQuotationServiceTest {
         assertThat(json).doesNotContain("\"markupPercentage\"");
         assertThat(json).doesNotContain("\"supplierName\"");
         assertThat(json).doesNotContain("\"internalNotes\"");
+        assertThat(json).doesNotContain("\"tenantId\"");
+        assertThat(json).doesNotContain("\"customerId\"");
+        assertThat(json).doesNotContain("\"approvedBy\"");
+        assertThat(json).doesNotContain("\"sentBy\"");
     }
 }

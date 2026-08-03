@@ -12,6 +12,7 @@ import com.freightflow.modules.commercial.rfq.dto.RfqFilterParams;
 import com.freightflow.modules.commercial.rfq.dto.UpdateRfqRequest;
 import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
 import com.freightflow.modules.commercial.quotation.QuotationRepository;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ForbiddenException;
@@ -30,20 +31,26 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ClientRfqService {
 
+    private static final String CLIENT_PORTAL_FEATURE_KEY = "CLIENT_PORTAL";
+
     private final RfqService rfqService;
     private final RfqRepository rfqRepository;
     private final QuotationRepository quotationRepository;
+    private final EntitlementEnforcementService entitlementEnforcementService;
 
     public ClientRfqService(RfqService rfqService,
                             RfqRepository rfqRepository,
-                            QuotationRepository quotationRepository) {
+                            QuotationRepository quotationRepository,
+                            EntitlementEnforcementService entitlementEnforcementService) {
         this.rfqService = rfqService;
         this.rfqRepository = rfqRepository;
         this.quotationRepository = quotationRepository;
+        this.entitlementEnforcementService = entitlementEnforcementService;
     }
 
     @Transactional
     public ClientRfqResponse create(ClientRfqCreateRequest request, UUID tenantId, UUID customerId, UUID userId) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         enforceOceanOnly(request.transportMode());
 
@@ -77,6 +84,7 @@ public class ClientRfqService {
     }
 
     public PageResponse<ClientRfqSummaryResponse> list(UUID tenantId, UUID customerId, Pageable pageable) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         var page = rfqRepository.findByTenantIdAndCustomerId(tenantId, scopedCustomerId, pageable);
         Map<UUID, Long> quotationCounts = countQuotations(
@@ -89,12 +97,14 @@ public class ClientRfqService {
     }
 
     public ClientRfqResponse getById(UUID id, UUID tenantId, UUID customerId) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         return mapDetail(getScopedRfq(id, tenantId, scopedCustomerId), tenantId);
     }
 
     @Transactional
     public ClientRfqResponse update(UUID id, ClientRfqUpdateRequest request, UUID tenantId, UUID customerId) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId, scopedCustomerId);
         if (rfq.getStatus() != RfqStatus.DRAFT) {
@@ -134,6 +144,7 @@ public class ClientRfqService {
 
     @Transactional
     public ClientRfqResponse submit(UUID id, UUID tenantId, UUID customerId) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId, scopedCustomerId);
         if (rfq.getStatus() != RfqStatus.DRAFT) {
@@ -146,6 +157,7 @@ public class ClientRfqService {
 
     @Transactional
     public ClientRfqResponse cancel(UUID id, UUID tenantId, UUID customerId) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId, scopedCustomerId);
         if (rfq.getStatus() != RfqStatus.DRAFT && rfq.getStatus() != RfqStatus.SUBMITTED) {

@@ -103,6 +103,52 @@ Recommended activation path:
 3. Move to `AUDIT` and review denial candidates without operational breakage.
 4. Promote to `ENFORCE` only after tenants that must use internal RFQ are correctly subscribed.
 
+## 1.2 Implementation Update — Phase E2 (Monday, August 3, 2026)
+
+Phase E2 extends the same runtime enforcement infrastructure to the commercial customer portal.
+
+Current additional protected scope:
+
+- `/api/v1/client/rfqs`
+- `/api/v1/client/rfqs/{id}`
+- `/api/v1/client/rfqs/{id}/submit`
+- `/api/v1/client/rfqs/{id}/cancel`
+- `/api/v1/client/quotations`
+- `/api/v1/client/quotations/{id}`
+
+Current runtime contract for E2:
+
+- canonical feature key: `CLIENT_PORTAL`
+- enforcement point:
+  - `ClientRfqService`
+  - `ClientQuotationService`
+- enforcement order:
+  1. resolve trusted `tenantId` from authenticated principal
+  2. call `requireEnabled(tenantId, "CLIENT_PORTAL")`
+  3. only then apply tenant/customer scoped lookups or mutations
+
+Dependency rule now effectively used in runtime:
+
+- `CLIENT_PORTAL` depends on `COMMERCIAL_RFQ` through the catalog dependency graph
+- E2 does not duplicate this dependency inside client services
+- if `CLIENT_PORTAL` is granted but `COMMERCIAL_RFQ` is not effective, the resolver keeps `CLIENT_PORTAL` ineffective and runtime returns `403 Feature Not Available`
+
+Security and visibility guarantees preserved in E2:
+
+- `403` happens before resource lookup when the tenant is not entitled
+- once the tenant is entitled, customer and tenant isolation still decide visibility
+- cross-customer and cross-tenant access remain `404`
+- client quotations remain restricted to `status=SENT`
+- non-`SENT` quotations remain `404`
+- DTOs remain sanitized and do not expose tenant/customer identifiers or internal commercial data
+
+Explicit non-scope after E2:
+
+- no enforcement yet for shipments, tracking, documents, fleet map, reports, or API access in the client namespace
+- no change to internal quotation workflow endpoints under `/api/v1/commercial/**`
+- no new rollout property, resolver, exception type, or migration
+- no usage limits, counters, overrides, or billing mutation
+
 ## 2. Current State Proven by Code
 
 ### 2.1 Tenant and user identity
@@ -666,7 +712,7 @@ The backend should use stable feature keys, not plan-name conditionals.
 | `AIS_TRACKING` | partially implemented | yes | `TRACKING` | depends on external AIS availability |
 | `COMMERCIAL_RFQ` | already exists | yes | none | internal RFQ workflow exists |
 | `QUOTATION_WORKFLOW` | already exists | yes | `COMMERCIAL_RFQ` | quotation lifecycle already modeled |
-| `CLIENT_PORTAL` | partially implemented | yes | none | client RFQ and quotation endpoints already exist |
+| `CLIENT_PORTAL` | partially implemented | yes | `COMMERCIAL_RFQ` | client RFQ and quotation endpoints already exist |
 | `BOOKING_MANAGEMENT` | future | yes | `QUOTATION_WORKFLOW` or agreements | depends on future business flow choice |
 | `DOCUMENT_MANAGEMENT` | already exists | yes | `SHIPMENT_MANAGEMENT` | tenant and customer-scoped documents exist |
 | `COMMERCIAL_AGREEMENTS` | future | yes | `QUOTATION_WORKFLOW` | not implemented yet |
@@ -680,7 +726,8 @@ Dependency decisions:
 - `QUOTATION_WORKFLOW` depends on `COMMERCIAL_RFQ`
 - `COMMERCIAL_AGREEMENTS` should depend on `QUOTATION_WORKFLOW`
 - `BOOKING_MANAGEMENT` should depend on accepted quotation or agreement in future phases
-- `CLIENT_PORTAL` should not depend on `COMMERCIAL_RFQ` globally, because future client shipment/document visibility may exist without RFQ
+- the current catalog and runtime keep `CLIENT_PORTAL` dependent on `COMMERCIAL_RFQ` for the commercial portal
+- if future shipment/document client surfaces must be sold independently, they should be modeled as distinct feature keys instead of weakening the current dependency
 
 ## 8. Demonstrative Commercial Plans
 
@@ -1209,6 +1256,12 @@ Scope:
 
 - `@RequiresFeature`
 - enforce commercial RFQ and client portal gates
+
+Implementation status as of Monday, August 3, 2026:
+
+- E1 is implemented for internal RFQ runtime under `COMMERCIAL_RFQ`
+- E2 is implemented for commercial customer portal RFQ and quotation runtime under `CLIENT_PORTAL`
+- rollout remains controlled only by `freightflow.entitlements.enforcement-mode`
 
 Risks:
 

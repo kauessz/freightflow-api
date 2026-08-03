@@ -2,6 +2,7 @@ package com.freightflow.modules.commercial.client.quotation;
 
 import com.freightflow.modules.commercial.client.quotation.dto.ClientQuotationResponse;
 import com.freightflow.modules.commercial.client.quotation.dto.ClientQuotationSummaryResponse;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
 import com.freightflow.modules.commercial.quotation.Quotation;
 import com.freightflow.modules.commercial.quotation.QuotationRepository;
 import com.freightflow.modules.commercial.quotation.enums.QuotationStatus;
@@ -18,13 +19,19 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class ClientQuotationService {
 
-    private final QuotationRepository quotationRepository;
+    private static final String CLIENT_PORTAL_FEATURE_KEY = "CLIENT_PORTAL";
 
-    public ClientQuotationService(QuotationRepository quotationRepository) {
+    private final QuotationRepository quotationRepository;
+    private final EntitlementEnforcementService entitlementEnforcementService;
+
+    public ClientQuotationService(QuotationRepository quotationRepository,
+                                  EntitlementEnforcementService entitlementEnforcementService) {
         this.quotationRepository = quotationRepository;
+        this.entitlementEnforcementService = entitlementEnforcementService;
     }
 
     public PageResponse<ClientQuotationSummaryResponse> list(UUID tenantId, UUID customerId, Pageable pageable) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         var page = quotationRepository.findByTenantIdAndRfqCustomerIdAndStatus(
                 tenantId, scopedCustomerId, QuotationStatus.SENT, pageable
@@ -33,6 +40,7 @@ public class ClientQuotationService {
     }
 
     public ClientQuotationResponse getById(UUID id, UUID tenantId, UUID customerId) {
+        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
         UUID scopedCustomerId = requireCustomerId(customerId);
         Quotation quotation = quotationRepository.findByIdAndTenantIdAndRfqCustomerIdAndStatus(
                 id, tenantId, scopedCustomerId, QuotationStatus.SENT

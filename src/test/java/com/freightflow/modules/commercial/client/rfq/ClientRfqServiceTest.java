@@ -25,6 +25,8 @@ import com.freightflow.modules.commercial.shared.WeightUnit;
 import com.freightflow.modules.commercial.quotation.QuotationRepository;
 import com.freightflow.modules.customer.Customer;
 import com.freightflow.modules.port.Port;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
+import com.freightflow.modules.platform.entitlement.FeatureNotAvailableException;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ForbiddenException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
@@ -50,8 +52,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,6 +67,7 @@ class ClientRfqServiceTest {
     @Mock private RfqService rfqService;
     @Mock private RfqRepository rfqRepository;
     @Mock private QuotationRepository quotationRepository;
+    @Mock private EntitlementEnforcementService entitlementEnforcementService;
 
     @InjectMocks private ClientRfqService clientRfqService;
 
@@ -103,6 +110,8 @@ class ClientRfqServiceTest {
         rfq.setNotes("Client note");
         rfq.replaceCargoItems(List.of(validCargoEntity()));
         rfq.replaceContainerRequirements(List.of(validContainerEntity()));
+
+        lenient().doNothing().when(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
     }
 
     @Test
@@ -118,6 +127,7 @@ class ClientRfqServiceTest {
         var response = clientRfqService.create(request, tenantId, customerId, userId);
 
         ArgumentCaptor<CreateRfqRequest> captor = ArgumentCaptor.forClass(CreateRfqRequest.class);
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
         verify(rfqService).create(captor.capture(), eq(tenantId), eq(userId));
         assertThat(captor.getValue().customerId()).isEqualTo(customerId);
         assertThat(captor.getValue().prospectCompanyName()).isNull();
@@ -143,6 +153,8 @@ class ClientRfqServiceTest {
     void deveRejeitarClientSemCustomer() {
         assertThatThrownBy(() -> clientRfqService.list(tenantId, null, PageRequest.of(0, 20)))
                 .isInstanceOf(ForbiddenException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
     }
 
     @Test
@@ -158,6 +170,7 @@ class ClientRfqServiceTest {
                 null, null, null, null, null, null, "Updated", null, null
         ), tenantId, customerId);
 
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
         verify(rfqService).update(eq(rfqId), any(UpdateRfqRequest.class), eq(tenantId));
     }
 
@@ -174,6 +187,7 @@ class ClientRfqServiceTest {
         ), tenantId, customerId)).isInstanceOf(BusinessException.class)
                 .hasMessageContaining("DRAFT");
 
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
         verify(rfqService, never()).update(any(), any(), any());
     }
 
@@ -187,6 +201,7 @@ class ClientRfqServiceTest {
 
         clientRfqService.cancel(rfqId, tenantId, customerId);
 
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
         verify(rfqService).cancel(rfqId, tenantId);
     }
 
@@ -200,6 +215,7 @@ class ClientRfqServiceTest {
 
         clientRfqService.cancel(rfqId, tenantId, customerId);
 
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
         verify(rfqService).cancel(rfqId, tenantId);
     }
 
@@ -213,6 +229,8 @@ class ClientRfqServiceTest {
         assertThatThrownBy(() -> clientRfqService.cancel(rfqId, tenantId, customerId))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("DRAFT or SUBMITTED");
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
     }
 
     @Test
@@ -223,6 +241,8 @@ class ClientRfqServiceTest {
 
         assertThatThrownBy(() -> clientRfqService.getById(rfqId, tenantId, customerId))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
     }
 
     @Test
@@ -233,6 +253,21 @@ class ClientRfqServiceTest {
 
         assertThatThrownBy(() -> clientRfqService.submit(rfqId, tenantId, customerId))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+    }
+
+    @Test
+    @DisplayName("deveBuscarDetalheDaPropriaRfq")
+    void deveBuscarDetalheDaPropriaRfq() {
+        when(rfqRepository.findByIdAndTenantIdAndCustomerId(rfqId, tenantId, customerId))
+                .thenReturn(Optional.of(rfq));
+        when(quotationRepository.countByRfqIdsAndTenantId(List.of(rfqId), tenantId)).thenReturn(List.of());
+
+        var response = clientRfqService.getById(rfqId, tenantId, customerId);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+        assertThat(response.id()).isEqualTo(rfqId.toString());
     }
 
     @Test
@@ -244,8 +279,23 @@ class ClientRfqServiceTest {
 
         var response = clientRfqService.list(tenantId, customerId, PageRequest.of(0, 20));
 
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
         assertThat(response.data()).hasSize(1);
         assertThat(response.data().get(0).id()).isEqualTo(rfqId.toString());
+    }
+
+    @Test
+    @DisplayName("deveSubmeterRfqDraftDoCliente")
+    void deveSubmeterRfqDraftDoCliente() {
+        rfq.setStatus(RfqStatus.DRAFT);
+        when(rfqRepository.findByIdAndTenantIdAndCustomerId(rfqId, tenantId, customerId))
+                .thenReturn(Optional.of(rfq));
+        when(quotationRepository.countByRfqIdsAndTenantId(List.of(rfqId), tenantId)).thenReturn(List.of());
+
+        clientRfqService.submit(rfqId, tenantId, customerId);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+        verify(rfqService).submit(rfqId, tenantId);
     }
 
     @Test
@@ -261,6 +311,34 @@ class ClientRfqServiceTest {
         assertThatThrownBy(() -> clientRfqService.create(request, tenantId, customerId, userId))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("only OCEAN");
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeCriacaoAntesDeSideEffects")
+    void enforcementNegadoImpedeCriacaoAntesDeSideEffects() {
+        doThrow(new FeatureNotAvailableException("CLIENT_PORTAL"))
+                .when(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+
+        assertThatThrownBy(() -> clientRfqService.create(validCreateRequest(), tenantId, customerId, userId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+        verifyNoInteractions(rfqService, rfqRepository, quotationRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeListagemAntesDaConsulta")
+    void enforcementNegadoImpedeListagemAntesDaConsulta() {
+        doThrow(new FeatureNotAvailableException("CLIENT_PORTAL"))
+                .when(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+
+        assertThatThrownBy(() -> clientRfqService.list(tenantId, customerId, PageRequest.of(0, 20)))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "CLIENT_PORTAL");
+        verifyNoInteractions(rfqRepository, quotationRepository, rfqService);
     }
 
     private ClientRfqCreateRequest validCreateRequest() {
