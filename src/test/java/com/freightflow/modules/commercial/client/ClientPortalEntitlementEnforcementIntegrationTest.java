@@ -46,10 +46,20 @@ class ClientPortalEntitlementEnforcementIntegrationTest extends AbstractClientPo
     private Tenant noPortalTenant;
     private Customer noPortalCustomer;
     private User noPortalClient;
+    private Quotation noPortalSentQuotation;
 
-    private Tenant portalWithoutRfqTenant;
-    private Customer portalWithoutRfqCustomer;
-    private User portalWithoutRfqClient;
+    private Tenant noWorkflowTenant;
+    private Customer noWorkflowCustomer;
+    private User noWorkflowClient;
+
+    private Tenant noPortalNoWorkflowTenant;
+    private Customer noPortalNoWorkflowCustomer;
+    private User noPortalNoWorkflowClient;
+    private Quotation noPortalNoWorkflowSentQuotation;
+
+    private Tenant workflowWithoutRfqTenant;
+    private Customer workflowWithoutRfqCustomer;
+    private User workflowWithoutRfqClient;
 
     private Tenant otherEnabledTenant;
     private Customer otherEnabledCustomer;
@@ -74,6 +84,7 @@ class ClientPortalEntitlementEnforcementIntegrationTest extends AbstractClientPo
         enabledAdmin = createAdminUser(enabledTenant, "Enabled");
         UUID enabledPlanId = insertPlan("CLIENT_PORTAL_ENABLED");
         grantPlanEntitlement(enabledPlanId, "COMMERCIAL_RFQ", true);
+        grantPlanEntitlement(enabledPlanId, "QUOTATION_WORKFLOW", true);
         grantPlanEntitlement(enabledPlanId, "CLIENT_PORTAL", true);
         insertSubscription(enabledTenant.getId(), enabledPlanId, "ACTIVE");
         enabledRfqA = createRfq(enabledTenant, enabledCustomerA, enabledClientA, origin, destination, "RFQ-CLIENT-ENABLED-1", RfqStatus.DRAFT);
@@ -89,6 +100,7 @@ class ClientPortalEntitlementEnforcementIntegrationTest extends AbstractClientPo
         suspendedClient = createClientUser(suspendedTenant, suspendedCustomer, "Suspended");
         UUID suspendedPlanId = insertPlan("CLIENT_PORTAL_SUSPENDED");
         grantPlanEntitlement(suspendedPlanId, "COMMERCIAL_RFQ", true);
+        grantPlanEntitlement(suspendedPlanId, "QUOTATION_WORKFLOW", true);
         grantPlanEntitlement(suspendedPlanId, "CLIENT_PORTAL", true);
         insertSubscription(suspendedTenant.getId(), suspendedPlanId, "SUSPENDED");
 
@@ -97,14 +109,36 @@ class ClientPortalEntitlementEnforcementIntegrationTest extends AbstractClientPo
         noPortalClient = createClientUser(noPortalTenant, noPortalCustomer, "NoPortal");
         UUID noPortalPlanId = insertPlan("CLIENT_PORTAL_NO_PORTAL");
         grantPlanEntitlement(noPortalPlanId, "COMMERCIAL_RFQ", true);
+        grantPlanEntitlement(noPortalPlanId, "QUOTATION_WORKFLOW", true);
         insertSubscription(noPortalTenant.getId(), noPortalPlanId, "ACTIVE");
+        User noPortalAdmin = createAdminUser(noPortalTenant, "NoPortal");
+        RequestForQuotation noPortalRfq = createRfq(noPortalTenant, noPortalCustomer, noPortalClient, origin, destination, "RFQ-CLIENT-NO-PORTAL", RfqStatus.DRAFT);
+        noPortalSentQuotation = createQuotation(noPortalTenant, noPortalRfq, noPortalAdmin, "Q-CLIENT-NO-PORTAL", QuotationStatus.SENT);
 
-        portalWithoutRfqTenant = createTenant("PortalOnly");
-        portalWithoutRfqCustomer = createCustomer(portalWithoutRfqTenant, "Portal Without RFQ Customer");
-        portalWithoutRfqClient = createClientUser(portalWithoutRfqTenant, portalWithoutRfqCustomer, "PortalOnly");
-        UUID portalWithoutRfqPlanId = insertPlan("CLIENT_PORTAL_WITHOUT_RFQ");
-        grantPlanEntitlement(portalWithoutRfqPlanId, "CLIENT_PORTAL", true);
-        insertSubscription(portalWithoutRfqTenant.getId(), portalWithoutRfqPlanId, "ACTIVE");
+        noWorkflowTenant = createTenant("NoWorkflow");
+        noWorkflowCustomer = createCustomer(noWorkflowTenant, "No Workflow Customer");
+        noWorkflowClient = createClientUser(noWorkflowTenant, noWorkflowCustomer, "NoWorkflow");
+        UUID noWorkflowPlanId = insertPlan("CLIENT_PORTAL_NO_WORKFLOW");
+        grantPlanEntitlement(noWorkflowPlanId, "COMMERCIAL_RFQ", true);
+        grantPlanEntitlement(noWorkflowPlanId, "CLIENT_PORTAL", true);
+        insertSubscription(noWorkflowTenant.getId(), noWorkflowPlanId, "ACTIVE");
+
+        noPortalNoWorkflowTenant = createTenant("NoPortalNoWorkflow");
+        noPortalNoWorkflowCustomer = createCustomer(noPortalNoWorkflowTenant, "No Portal No Workflow Customer");
+        noPortalNoWorkflowClient = createClientUser(noPortalNoWorkflowTenant, noPortalNoWorkflowCustomer, "NoPortalNoWorkflow");
+        UUID noPortalNoWorkflowPlanId = insertPlan("CLIENT_PORTAL_NO_PORTAL_NO_WORKFLOW");
+        insertSubscription(noPortalNoWorkflowTenant.getId(), noPortalNoWorkflowPlanId, "ACTIVE");
+        User noPortalNoWorkflowAdmin = createAdminUser(noPortalNoWorkflowTenant, "NoPortalNoWorkflow");
+        RequestForQuotation noPortalNoWorkflowRfq = createRfq(noPortalNoWorkflowTenant, noPortalNoWorkflowCustomer, noPortalNoWorkflowClient, origin, destination, "RFQ-CLIENT-NO-PORTAL-NO-WORKFLOW", RfqStatus.DRAFT);
+        noPortalNoWorkflowSentQuotation = createQuotation(noPortalNoWorkflowTenant, noPortalNoWorkflowRfq, noPortalNoWorkflowAdmin, "Q-CLIENT-NO-PORTAL-NO-WORKFLOW", QuotationStatus.SENT);
+
+        workflowWithoutRfqTenant = createTenant("WorkflowWithoutRfq");
+        workflowWithoutRfqCustomer = createCustomer(workflowWithoutRfqTenant, "Workflow Without RFQ Customer");
+        workflowWithoutRfqClient = createClientUser(workflowWithoutRfqTenant, workflowWithoutRfqCustomer, "WorkflowWithoutRfq");
+        UUID workflowWithoutRfqPlanId = insertPlan("CLIENT_PORTAL_WITHOUT_RFQ");
+        grantPlanEntitlement(workflowWithoutRfqPlanId, "CLIENT_PORTAL", true);
+        grantPlanEntitlement(workflowWithoutRfqPlanId, "QUOTATION_WORKFLOW", true);
+        insertSubscription(workflowWithoutRfqTenant.getId(), workflowWithoutRfqPlanId, "ACTIVE");
 
         otherEnabledTenant = createTenant("OtherEnabled");
         otherEnabledCustomer = createCustomer(otherEnabledTenant, "Other Tenant Customer");
@@ -112,6 +146,7 @@ class ClientPortalEntitlementEnforcementIntegrationTest extends AbstractClientPo
         User otherAdmin = createAdminUser(otherEnabledTenant, "OtherEnabled");
         UUID otherEnabledPlanId = insertPlan("CLIENT_PORTAL_OTHER_ENABLED");
         grantPlanEntitlement(otherEnabledPlanId, "COMMERCIAL_RFQ", true);
+        grantPlanEntitlement(otherEnabledPlanId, "QUOTATION_WORKFLOW", true);
         grantPlanEntitlement(otherEnabledPlanId, "CLIENT_PORTAL", true);
         insertSubscription(otherEnabledTenant.getId(), otherEnabledPlanId, "ACTIVE");
         otherTenantRfq = createRfq(otherEnabledTenant, otherEnabledCustomer, otherEnabledClient, origin, destination, "RFQ-CLIENT-OTHER-TENANT", RfqStatus.DRAFT);
@@ -208,10 +243,37 @@ class ClientPortalEntitlementEnforcementIntegrationTest extends AbstractClientPo
     }
 
     @Test
-    @DisplayName("clientPortalSemCommercialRfqEfetivoRecebe403")
-    void clientPortalSemCommercialRfqEfetivoRecebe403() throws Exception {
+    @DisplayName("quotationClientSemClientPortalRecebe403MesmoQuandoWorkflowEstaEfetivo")
+    void quotationClientSemClientPortalRecebe403MesmoQuandoWorkflowEstaEfetivo() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/client/quotations/{id}", noPortalSentQuotation.getId())
+                        .with(asUser(noPortalClient)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.featureKey").value("CLIENT_PORTAL"));
+    }
+
+    @Test
+    @DisplayName("clientPortalSemQuotationWorkflowRecebe403")
+    void clientPortalSemQuotationWorkflowRecebe403() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/client/quotations")
-                        .with(asUser(portalWithoutRfqClient)))
+                        .with(asUser(noWorkflowClient)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.featureKey").value("QUOTATION_WORKFLOW"));
+    }
+
+    @Test
+    @DisplayName("quotationClientSemClientPortalESemQuotationWorkflowRecebe403ComPrimeiraNegacaoDeterministica")
+    void quotationClientSemClientPortalESemQuotationWorkflowRecebe403ComPrimeiraNegacaoDeterministica() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/client/quotations/{id}", noPortalNoWorkflowSentQuotation.getId())
+                        .with(asUser(noPortalNoWorkflowClient)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.featureKey").value("CLIENT_PORTAL"));
+    }
+
+    @Test
+    @DisplayName("quotationWorkflowSemCommercialRfqEfetivoRecebe403PelaDependencia")
+    void quotationWorkflowSemCommercialRfqEfetivoRecebe403PelaDependencia() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/client/quotations")
+                        .with(asUser(workflowWithoutRfqClient)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.featureKey").value("CLIENT_PORTAL"));
     }

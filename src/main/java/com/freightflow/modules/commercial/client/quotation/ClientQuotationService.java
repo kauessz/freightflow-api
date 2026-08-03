@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -20,6 +21,7 @@ import java.util.UUID;
 public class ClientQuotationService {
 
     private static final String CLIENT_PORTAL_FEATURE_KEY = "CLIENT_PORTAL";
+    private static final String QUOTATION_WORKFLOW_FEATURE_KEY = "QUOTATION_WORKFLOW";
 
     private final QuotationRepository quotationRepository;
     private final EntitlementEnforcementService entitlementEnforcementService;
@@ -31,7 +33,10 @@ public class ClientQuotationService {
     }
 
     public PageResponse<ClientQuotationSummaryResponse> list(UUID tenantId, UUID customerId, Pageable pageable) {
-        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
+        entitlementEnforcementService.requireAllEnabled(
+                tenantId,
+                List.of(CLIENT_PORTAL_FEATURE_KEY, QUOTATION_WORKFLOW_FEATURE_KEY)
+        );
         UUID scopedCustomerId = requireCustomerId(customerId);
         var page = quotationRepository.findByTenantIdAndRfqCustomerIdAndStatus(
                 tenantId, scopedCustomerId, QuotationStatus.SENT, pageable
@@ -40,7 +45,10 @@ public class ClientQuotationService {
     }
 
     public ClientQuotationResponse getById(UUID id, UUID tenantId, UUID customerId) {
-        entitlementEnforcementService.requireEnabled(tenantId, CLIENT_PORTAL_FEATURE_KEY);
+        entitlementEnforcementService.requireAllEnabled(
+                tenantId,
+                List.of(CLIENT_PORTAL_FEATURE_KEY, QUOTATION_WORKFLOW_FEATURE_KEY)
+        );
         UUID scopedCustomerId = requireCustomerId(customerId);
         Quotation quotation = quotationRepository.findByIdAndTenantIdAndRfqCustomerIdAndStatus(
                 id, tenantId, scopedCustomerId, QuotationStatus.SENT

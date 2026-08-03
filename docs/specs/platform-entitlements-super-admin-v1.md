@@ -149,6 +149,81 @@ Explicit non-scope after E2:
 - no new rollout property, resolver, exception type, or migration
 - no usage limits, counters, overrides, or billing mutation
 
+## 1.3 Implementation Update — Phase E3 (Monday, August 3, 2026)
+
+Phase E3 extends entitlement enforcement into the internal quotation workflow while keeping the rollout contract and lifecycle semantics stable.
+
+Current additional protected scope:
+
+- `POST /api/v1/commercial/rfqs/{rfqId}/quotations`
+- `GET /api/v1/commercial/quotations`
+- `GET /api/v1/commercial/quotations/{id}`
+- `PATCH /api/v1/commercial/quotations/{id}`
+- `POST /api/v1/commercial/quotations/{id}/items`
+- `PATCH /api/v1/commercial/quotations/{id}/items/{itemId}`
+- `DELETE /api/v1/commercial/quotations/{id}/items/{itemId}`
+- `POST /api/v1/commercial/quotations/{id}/ready-for-review`
+- `POST /api/v1/commercial/quotations/{id}/approve`
+- `POST /api/v1/commercial/quotations/{id}/send`
+- `POST /api/v1/commercial/quotations/{id}/cancel`
+
+Current runtime contract for E3:
+
+- canonical internal feature key: `QUOTATION_WORKFLOW`
+- enforcement point:
+  - `QuotationService`
+- enforcement timing:
+  1. resolve trusted `tenantId` from authenticated principal
+  2. call `requireEnabled(tenantId, "QUOTATION_WORKFLOW")`
+  3. only then perform repository lookup, pagination, calculations, lifecycle validation, persistence, or RFQ status mutation
+
+Client quotation rule introduced in E3:
+
+- `ClientQuotationService` now requires both:
+  - `CLIENT_PORTAL`
+  - `QUOTATION_WORKFLOW`
+- the service resolves both features through a single internal batch decision instead of calling the resolver twice
+- client RFQ endpoints remain protected only by `CLIENT_PORTAL`
+
+Batch-enforcement behavior introduced in E3:
+
+- `checkAll(...)` and `requireAllEnabled(...)` normalize feature keys, remove duplicates, sort deterministically, and call the tenant resolver once per decision
+- aggregated decisions preserve:
+  - `tenantId`
+  - `enforcementMode`
+  - requested feature keys
+  - individual per-feature decisions
+  - aggregated `entitled`
+  - aggregated `allowedByRollout`
+  - aggregated `allowed`
+  - deterministic `firstDeniedFeatureKey`
+- `FeatureNotAvailableException` remains the public error contract
+- only the first denied feature key is exposed in `403` Problem Details
+
+Lifecycle guarantees preserved in E3:
+
+- quotation creation still requires RFQ in `UNDER_ANALYSIS`
+- `ready-for-review` still does not mark RFQ as `QUOTED`
+- only `send` moves the RFQ from `UNDER_ANALYSIS` to `QUOTED`
+- existing quotation status transitions remain unchanged
+
+Rollout semantics remain unchanged:
+
+- `DISABLED`
+  - internal quotation workflow and client quotation visibility remain compatible even without real subscription entitlement
+- `AUDIT`
+  - operations remain allowed
+  - each actually denied feature is logged once
+- `ENFORCE`
+  - internal quotation workflow requires effective `QUOTATION_WORKFLOW`
+  - client quotation visibility requires effective `CLIENT_PORTAL` and `QUOTATION_WORKFLOW`
+
+Explicit non-scope after E3:
+
+- no enforcement yet for shipments, booking, reports, tracking, fleet map, documents, or platform API access
+- no migration changes to `V28` or `V29`
+- no billing, usage counters, overrides, or frontend changes
+
 ## 2. Current State Proven by Code
 
 ### 2.1 Tenant and user identity

@@ -20,11 +20,14 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,6 +109,97 @@ class EntitlementEnforcementServiceTest {
         assertThat(decision.allowed()).isTrue();
         assertThat(decision.allowedByRollout()).isFalse();
         assertThat(decision.denialReason()).isEqualTo(EntitlementDenialReason.NONE);
+    }
+
+    @Test
+    @DisplayName("checkAllPermiteQuandoTodasAsFeaturesEstaoEfetivasComUmaResolucao")
+    void checkAllPermiteQuandoTodasAsFeaturesEstaoEfetivasComUmaResolucao() {
+        properties.setEnforcementMode(EntitlementEnforcementMode.ENFORCE);
+        when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
+                .thenReturn(resolution(
+                        TenantEntitlementAccessStatus.ACTIVE,
+                        List.of(
+                                feature("COMMERCIAL_RFQ", true, true),
+                                feature("QUOTATION_WORKFLOW", true, true)
+                        )
+                ));
+
+        EntitlementBatchDecision decision = service.checkAll(
+                TENANT_ID,
+                List.of(" quotation_workflow ", "commercial_rfq")
+        );
+
+        assertThat(decision.featureKeys()).containsExactly("COMMERCIAL_RFQ", "QUOTATION_WORKFLOW");
+        assertThat(decision.decisions()).hasSize(2);
+        assertThat(decision.entitled()).isTrue();
+        assertThat(decision.allowed()).isTrue();
+        assertThat(decision.allowedByRollout()).isFalse();
+        assertThat(decision.firstDeniedFeatureKey()).isNull();
+        verify(tenantEntitlementResolverService, times(1)).resolveTenantEntitlements(TENANT_ID);
+    }
+
+    @Test
+    @DisplayName("checkAllDeduplicaOrdenaEDefinePrimeiraNegacaoDeterministica")
+    void checkAllDeduplicaOrdenaEDefinePrimeiraNegacaoDeterministica() {
+        properties.setEnforcementMode(EntitlementEnforcementMode.ENFORCE);
+        when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
+                .thenReturn(resolution(
+                        TenantEntitlementAccessStatus.ACTIVE,
+                        List.of(
+                                feature("COMMERCIAL_RFQ", true, true),
+                                feature("QUOTATION_WORKFLOW", false, false)
+                        )
+                ));
+
+        EntitlementBatchDecision decision = service.checkAll(
+                TENANT_ID,
+                List.of("quotation_workflow", "COMMERCIAL_RFQ", " quotation_workflow ")
+        );
+
+        assertThat(decision.featureKeys()).containsExactly("COMMERCIAL_RFQ", "QUOTATION_WORKFLOW");
+        assertThat(decision.decisions()).extracting(EntitlementDecision::featureKey)
+                .containsExactly("COMMERCIAL_RFQ", "QUOTATION_WORKFLOW");
+        assertThat(decision.decisions()).extracting(EntitlementDecision::entitled)
+                .containsExactly(true, false);
+        assertThat(decision.entitled()).isFalse();
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.allowedByRollout()).isFalse();
+        assertThat(decision.firstDeniedFeatureKey()).isEqualTo("QUOTATION_WORKFLOW");
+        verify(tenantEntitlementResolverService, times(1)).resolveTenantEntitlements(TENANT_ID);
+    }
+
+    @Test
+    @DisplayName("checkAllEmAuditRegistraCadaFeatureNegadaUmaVez")
+    void checkAllEmAuditRegistraCadaFeatureNegadaUmaVez() {
+        properties.setEnforcementMode(EntitlementEnforcementMode.AUDIT);
+        when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
+                .thenReturn(resolution(
+                        TenantEntitlementAccessStatus.ACTIVE,
+                        List.of(
+                                feature("COMMERCIAL_RFQ", false, false),
+                                feature("QUOTATION_WORKFLOW", true, false)
+                        )
+                ));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(EntitlementEnforcementService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            EntitlementBatchDecision decision = service.checkAll(
+                    TENANT_ID,
+                    new LinkedHashSet<>(List.of("quotation_workflow", "COMMERCIAL_RFQ", "commercial_rfq"))
+            );
+
+            assertThat(decision.allowed()).isTrue();
+            assertThat(decision.allowedByRollout()).isTrue();
+            assertThat(decision.firstDeniedFeatureKey()).isEqualTo("COMMERCIAL_RFQ");
+            assertThat(appender.list).hasSize(2);
+            assertThat(appender.list.get(0).getFormattedMessage()).contains("COMMERCIAL_RFQ");
+            assertThat(appender.list.get(1).getFormattedMessage()).contains("QUOTATION_WORKFLOW");
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 
     @Test
@@ -207,6 +301,14 @@ class EntitlementEnforcementServiceTest {
     }
 
     @Test
+    @DisplayName("featureKeysVaziasSaoRejeitadas")
+    void featureKeysVaziasSaoRejeitadas() {
+        assertThatThrownBy(() -> service.checkAll(TENANT_ID, List.of()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("featureKeys");
+    }
+
+    @Test
     @DisplayName("requireEnabledLancaSomenteQuandoModoEfetivoBloqueia")
     void requireEnabledLancaSomenteQuandoModoEfetivoBloqueia() {
         when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
@@ -222,6 +324,38 @@ class EntitlementEnforcementServiceTest {
         assertThatThrownBy(() -> service.requireEnabled(TENANT_ID, "COMMERCIAL_RFQ"))
                 .isInstanceOf(FeatureNotAvailableException.class)
                 .hasMessage("This feature is not available for the current tenant.");
+    }
+
+    @Test
+    @DisplayName("requireAllEnabledLancaSomentePrimeiraFeatureNegada")
+    void requireAllEnabledLancaSomentePrimeiraFeatureNegada() {
+        properties.setEnforcementMode(EntitlementEnforcementMode.ENFORCE);
+        when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
+                .thenReturn(resolution(
+                        TenantEntitlementAccessStatus.ACTIVE,
+                        List.of(
+                                feature("COMMERCIAL_RFQ", false, false),
+                                feature("QUOTATION_WORKFLOW", true, false)
+                        )
+                ));
+
+        assertThatThrownBy(() -> service.requireAllEnabled(
+                TENANT_ID,
+                List.of("QUOTATION_WORKFLOW", "COMMERCIAL_RFQ")
+        )).isInstanceOf(FeatureNotAvailableException.class)
+                .extracting("featureKey")
+                .isEqualTo("COMMERCIAL_RFQ");
+    }
+
+    @Test
+    @DisplayName("erroTecnicoDoResolverEhPropagado")
+    void erroTecnicoDoResolverEhPropagado() {
+        when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
+                .thenThrow(new IllegalStateException("boom"));
+
+        assertThatThrownBy(() -> service.checkAll(TENANT_ID, List.of("COMMERCIAL_RFQ", "QUOTATION_WORKFLOW")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("boom");
     }
 
     @Test

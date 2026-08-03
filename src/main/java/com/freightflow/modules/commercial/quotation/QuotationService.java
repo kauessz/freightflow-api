@@ -15,6 +15,7 @@ import com.freightflow.modules.commercial.quotation.enums.QuotationStatus;
 import com.freightflow.modules.commercial.rfq.RequestForQuotation;
 import com.freightflow.modules.commercial.rfq.RfqRepository;
 import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
 import com.freightflow.shared.pagination.PageResponse;
@@ -35,6 +36,7 @@ import java.util.UUID;
 public class QuotationService {
 
     private static final Logger log = LoggerFactory.getLogger(QuotationService.class);
+    private static final String QUOTATION_WORKFLOW_FEATURE_KEY = "QUOTATION_WORKFLOW";
 
     private final QuotationRepository quotationRepository;
     private final QuotationItemRepository quotationItemRepository;
@@ -42,33 +44,39 @@ public class QuotationService {
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final QuotationFinancialCalculator financialCalculator;
+    private final EntitlementEnforcementService entitlementEnforcementService;
 
     public QuotationService(QuotationRepository quotationRepository,
                             QuotationItemRepository quotationItemRepository,
                             RfqRepository rfqRepository,
                             TenantRepository tenantRepository,
                             UserRepository userRepository,
-                            QuotationFinancialCalculator financialCalculator) {
+                            QuotationFinancialCalculator financialCalculator,
+                            EntitlementEnforcementService entitlementEnforcementService) {
         this.quotationRepository = quotationRepository;
         this.quotationItemRepository = quotationItemRepository;
         this.rfqRepository = rfqRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.financialCalculator = financialCalculator;
+        this.entitlementEnforcementService = entitlementEnforcementService;
     }
 
     public PageResponse<QuotationSummaryResponse> list(UUID tenantId, QuotationFilterParams filters, Pageable pageable) {
+        requireQuotationWorkflow(tenantId);
         var page = quotationRepository.findAll(buildSpec(tenantId, filters), pageable);
         return PageResponse.from(page.map(QuotationSummaryResponse::from));
     }
 
     public QuotationResponse getById(UUID id, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(id, tenantId);
         return QuotationResponse.from(quotation, quotationCountForRfq(tenantId, quotation.getRfq().getId()));
     }
 
     @Transactional
     public QuotationResponse create(UUID rfqId, CreateQuotationRequest request, UUID tenantId, UUID userId) {
+        requireQuotationWorkflow(tenantId);
         log.info("Creating quotation number={} for tenant={}", request.quotationNumber(), tenantId);
         RequestForQuotation rfq = rfqRepository.findByIdAndTenantId(rfqId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("RequestForQuotation", rfqId));
@@ -112,6 +120,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse update(UUID id, UpdateQuotationRequest request, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(id, tenantId);
         ensureDraft(quotation);
 
@@ -136,6 +145,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse addItem(UUID quotationId, CreateQuotationItemRequest request, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(quotationId, tenantId);
         ensureDraft(quotation);
 
@@ -162,6 +172,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse updateItem(UUID quotationId, UUID itemId, UpdateQuotationItemRequest request, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(quotationId, tenantId);
         ensureDraft(quotation);
         QuotationItem item = findItem(quotation, itemId);
@@ -194,6 +205,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse deleteItem(UUID quotationId, UUID itemId, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(quotationId, tenantId);
         ensureDraft(quotation);
         QuotationItem item = findItem(quotation, itemId);
@@ -206,6 +218,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse readyForReview(UUID id, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(id, tenantId);
         ensureDraft(quotation);
         if (quotation.getItems().isEmpty()) {
@@ -221,6 +234,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse cancel(UUID id, UUID tenantId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(id, tenantId);
         if (quotation.getStatus() == QuotationStatus.CANCELLED || quotation.getStatus() == QuotationStatus.EXPIRED) {
             throw new BusinessException("Quotation is already not actionable");
@@ -235,6 +249,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse approve(UUID id, UUID tenantId, UUID userId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(id, tenantId);
         if (quotation.getStatus() != QuotationStatus.READY_FOR_REVIEW) {
             throw new BusinessException("Only quotations in READY_FOR_REVIEW can be approved");
@@ -253,6 +268,7 @@ public class QuotationService {
 
     @Transactional
     public QuotationResponse send(UUID id, UUID tenantId, UUID userId) {
+        requireQuotationWorkflow(tenantId);
         Quotation quotation = getScopedQuotation(id, tenantId);
         if (quotation.getStatus() != QuotationStatus.APPROVED) {
             throw new BusinessException("Only quotations in APPROVED can be sent");
@@ -475,5 +491,9 @@ public class QuotationService {
                 .findFirst()
                 .map(QuotationRepository.RfqQuotationCountView::getQuotationCount)
                 .orElse(0L);
+    }
+
+    private void requireQuotationWorkflow(UUID tenantId) {
+        entitlementEnforcementService.requireEnabled(tenantId, QUOTATION_WORKFLOW_FEATURE_KEY);
     }
 }

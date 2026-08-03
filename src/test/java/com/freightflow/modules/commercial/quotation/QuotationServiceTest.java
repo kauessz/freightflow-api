@@ -6,7 +6,9 @@ import com.freightflow.modules.auth.User;
 import com.freightflow.modules.auth.UserRepository;
 import com.freightflow.modules.commercial.quotation.dto.CreateQuotationItemRequest;
 import com.freightflow.modules.commercial.quotation.dto.CreateQuotationRequest;
+import com.freightflow.modules.commercial.quotation.dto.QuotationFilterParams;
 import com.freightflow.modules.commercial.quotation.dto.UpdateQuotationItemRequest;
+import com.freightflow.modules.commercial.quotation.dto.UpdateQuotationRequest;
 import com.freightflow.modules.commercial.quotation.enums.ChargeCategory;
 import com.freightflow.modules.commercial.quotation.enums.ChargeScope;
 import com.freightflow.modules.commercial.quotation.enums.QuotationStatus;
@@ -17,6 +19,8 @@ import com.freightflow.modules.commercial.rfq.enums.RfqDirection;
 import com.freightflow.modules.commercial.rfq.enums.RfqServiceType;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
 import com.freightflow.modules.customer.Customer;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
+import com.freightflow.modules.platform.entitlement.FeatureNotAvailableException;
 import com.freightflow.modules.port.Port;
 import com.freightflow.shared.exception.BusinessException;
 import com.freightflow.shared.exception.ResourceNotFoundException;
@@ -26,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -37,8 +42,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,6 +59,7 @@ class QuotationServiceTest {
     @Mock private RfqRepository rfqRepository;
     @Mock private TenantRepository tenantRepository;
     @Mock private UserRepository userRepository;
+    @Mock private EntitlementEnforcementService entitlementEnforcementService;
 
     private QuotationService quotationService;
 
@@ -88,8 +98,10 @@ class QuotationServiceTest {
                 rfqRepository,
                 tenantRepository,
                 userRepository,
-                new QuotationFinancialCalculator()
+                new QuotationFinancialCalculator(),
+                entitlementEnforcementService
         );
+        lenient().doNothing().when(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
     }
 
     @Test
@@ -113,6 +125,7 @@ class QuotationServiceTest {
         assertThat(response.quotationNumber()).isEqualTo("Q-001");
         assertThat(response.status()).isEqualTo(QuotationStatus.DRAFT);
         assertThat(response.sellingCurrency()).isEqualTo("USD");
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
     }
 
     @Test
@@ -123,6 +136,8 @@ class QuotationServiceTest {
         assertThatThrownBy(() -> quotationService.create(rfqId, validQuotationRequest(), tenantId, userId))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("RequestForQuotation");
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
     }
 
     @Test
@@ -185,6 +200,7 @@ class QuotationServiceTest {
         assertThat(response.costTotal()).isEqualByComparingTo("100.00");
         assertThat(response.sellingTotal()).isEqualByComparingTo("150.00");
         assertThat(response.profitAmount()).isEqualByComparingTo("50.00");
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
     }
 
     @Test
@@ -308,6 +324,103 @@ class QuotationServiceTest {
         assertThat(quotation.getSentAt()).isNotNull();
         assertThat(quotation.getSentBy()).isEqualTo(user);
         assertThat(quotation.getRfq().getStatus()).isEqualTo(RfqStatus.QUOTED);
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeListagemAntesDaConsulta")
+    void enforcementNegadoImpedeListagemAntesDaConsulta() {
+        blockQuotationWorkflow();
+
+        assertThatThrownBy(() -> quotationService.list(
+                tenantId,
+                new QuotationFilterParams(null, null, null, null, null, null, null),
+                PageRequest.of(0, 20)
+        )).isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+        verifyNoInteractions(quotationRepository, quotationItemRepository, rfqRepository, tenantRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeDetalheAntesDaConsulta")
+    void enforcementNegadoImpedeDetalheAntesDaConsulta() {
+        blockQuotationWorkflow();
+
+        assertThatThrownBy(() -> quotationService.getById(UUID.randomUUID(), tenantId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+        verifyNoInteractions(quotationRepository, quotationItemRepository, rfqRepository, tenantRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeCriacaoAntesDoLookupDoRfq")
+    void enforcementNegadoImpedeCriacaoAntesDoLookupDoRfq() {
+        blockQuotationWorkflow();
+
+        assertThatThrownBy(() -> quotationService.create(rfqId, validQuotationRequest(), tenantId, userId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+        verifyNoInteractions(quotationRepository, quotationItemRepository, rfqRepository, tenantRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeUpdateAntesDoLookupDaQuotation")
+    void enforcementNegadoImpedeUpdateAntesDoLookupDaQuotation() {
+        blockQuotationWorkflow();
+
+        assertThatThrownBy(() -> quotationService.update(
+                UUID.randomUUID(),
+                new UpdateQuotationRequest(null, null, null, null, null, null, null, null, null, null, null, null, null),
+                tenantId
+        )).isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+        verifyNoInteractions(quotationRepository, quotationItemRepository, rfqRepository, tenantRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeMutacoesDeItensAntesDeLookupOuPersistencia")
+    void enforcementNegadoImpedeMutacoesDeItensAntesDeLookupOuPersistencia() {
+        UUID quotationId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        blockQuotationWorkflow();
+
+        assertThatThrownBy(() -> quotationService.addItem(quotationId, validItemRequest(), tenantId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+        assertThatThrownBy(() -> quotationService.updateItem(
+                quotationId,
+                itemId,
+                new UpdateQuotationItemRequest(null, null, null, null, null, null, null, new BigDecimal("200"),
+                        BigDecimal.ONE, null, null, null, null, null, null),
+                tenantId
+        )).isInstanceOf(FeatureNotAvailableException.class);
+        assertThatThrownBy(() -> quotationService.deleteItem(quotationId, itemId, tenantId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService, org.mockito.Mockito.times(3)).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+        verifyNoInteractions(quotationRepository, quotationItemRepository, rfqRepository, tenantRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("enforcementNegadoImpedeTransicoesDeLifecycleSemAlterarEstados")
+    void enforcementNegadoImpedeTransicoesDeLifecycleSemAlterarEstados() {
+        UUID quotationId = UUID.randomUUID();
+        blockQuotationWorkflow();
+
+        assertThatThrownBy(() -> quotationService.readyForReview(quotationId, tenantId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+        assertThatThrownBy(() -> quotationService.approve(quotationId, tenantId, userId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+        assertThatThrownBy(() -> quotationService.send(quotationId, tenantId, userId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+        assertThatThrownBy(() -> quotationService.cancel(quotationId, tenantId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verify(entitlementEnforcementService, org.mockito.Mockito.times(4)).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
+        verifyNoInteractions(quotationRepository, quotationItemRepository, rfqRepository, tenantRepository, userRepository);
     }
 
     @Test
@@ -462,6 +575,11 @@ class QuotationServiceTest {
                 "Commercial notes",
                 "Internal notes"
         );
+    }
+
+    private void blockQuotationWorkflow() {
+        doThrow(new FeatureNotAvailableException("QUOTATION_WORKFLOW"))
+                .when(entitlementEnforcementService).requireEnabled(tenantId, "QUOTATION_WORKFLOW");
     }
 
     private CreateQuotationItemRequest validItemRequest() {
