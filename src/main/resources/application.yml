@@ -55,6 +55,8 @@ springdoc:
     path: /swagger-ui.html
 
 freightflow:
+  entitlements:
+    enforcement-mode: ${ENTITLEMENT_ENFORCEMENT_MODE:DISABLED}
   jwt:
     secret: ${JWT_SECRET:freightflow-dev-secret-key-minimum-32-bytes-long!!}
   platform:

@@ -1,5 +1,6 @@
 package com.freightflow.shared.exception;
 
+import com.freightflow.modules.platform.entitlement.FeatureNotAvailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -56,6 +57,18 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         detail.setTitle("Forbidden");
         detail.setType(URI.create("https://api.freightflow.com/errors/forbidden"));
+        return detail;
+    }
+
+    @ExceptionHandler(FeatureNotAvailableException.class)
+    public ProblemDetail handleFeatureNotAvailable(FeatureNotAvailableException ex, WebRequest request) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN,
+                "This feature is not available for the current tenant."
+        );
+        detail.setTitle("Feature Not Available");
+        detail.setType(URI.create("https://api.freightflow.com/errors/feature-not-available"));
+        detail.setProperty("featureKey", ex.getFeatureKey());
         return detail;
     }
 

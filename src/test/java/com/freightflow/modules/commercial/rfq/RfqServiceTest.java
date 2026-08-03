@@ -16,6 +16,8 @@ import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
 import com.freightflow.modules.commercial.shared.IncotermCode;
 import com.freightflow.modules.commercial.shared.WeightUnit;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
+import com.freightflow.modules.platform.entitlement.FeatureNotAvailableException;
 import com.freightflow.modules.customer.Customer;
 import com.freightflow.modules.customer.CustomerRepository;
 import com.freightflow.modules.port.Port;
@@ -41,8 +43,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,6 +61,7 @@ class RfqServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private PortRepository portRepository;
     @Mock private QuotationRepository quotationRepository;
+    @Mock private EntitlementEnforcementService entitlementEnforcementService;
 
     @InjectMocks private RfqService rfqService;
 
@@ -100,6 +107,9 @@ class RfqServiceTest {
         ReflectionTestUtils.setField(originPort, "id", originPortId);
         destinationPort = new Port("NLRTM", "Rotterdam", "NL", "Europe/Amsterdam", null, null);
         ReflectionTestUtils.setField(destinationPort, "id", destinationPortId);
+
+        lenient().doNothing().when(entitlementEnforcementService).requireEnabled(tenantId, "COMMERCIAL_RFQ");
+        lenient().doNothing().when(entitlementEnforcementService).requireEnabled(otherTenantId, "COMMERCIAL_RFQ");
     }
 
     @Test
@@ -420,6 +430,19 @@ class RfqServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(rfqRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("naoDeveCriarRfqQuandoFeatureNaoEstaDisponivel")
+    void naoDeveCriarRfqQuandoFeatureNaoEstaDisponivel() {
+        doThrow(new FeatureNotAvailableException("COMMERCIAL_RFQ"))
+                .when(entitlementEnforcementService)
+                .requireEnabled(tenantId, "COMMERCIAL_RFQ");
+
+        assertThatThrownBy(() -> rfqService.create(validFclRequest(), tenantId, userId))
+                .isInstanceOf(FeatureNotAvailableException.class);
+
+        verifyNoInteractions(rfqRepository, tenantRepository, customerRepository, userRepository, portRepository, quotationRepository);
     }
 
     private void mockBaseCreateLookups() {

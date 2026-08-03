@@ -35,6 +35,74 @@ This document defines the V1 architectural direction for:
 
 This is a specification-only round. No production code, migrations, entities, or public endpoints are changed by this document.
 
+## 1.1 Implementation Update — Phase E1 (Sunday, August 2, 2026)
+
+Phase E1 is now implemented in backend runtime with a conservative rollout default.
+
+Current runtime contract:
+
+- configuration key: `freightflow.entitlements.enforcement-mode`
+- environment variable: `ENTITLEMENT_ENFORCEMENT_MODE`
+- accepted values:
+  - `DISABLED`
+  - `AUDIT`
+  - `ENFORCE`
+- default value: `DISABLED`
+- invalid values fail application startup during configuration binding.
+
+Current pilot scope:
+
+- only internal commercial RFQ operations under `/api/v1/commercial/rfqs/**`
+- enforced at `RfqService`, before repository writes or lifecycle side effects
+- canonical feature key: `COMMERCIAL_RFQ`
+
+Mode semantics implemented:
+
+- `DISABLED`
+  - never blocks
+  - still resolves the real entitlement decision
+  - marks the operation as allowed by rollout when the tenant is not truly entitled
+- `AUDIT`
+  - never blocks
+  - resolves the real entitlement decision
+  - logs a safe structured denial candidate with:
+    - `tenantId`
+    - `featureKey`
+    - `accessStatus`
+    - `denialReason`
+    - `enforcementMode`
+- `ENFORCE`
+  - allows only when `accessStatus=ACTIVE` and `effectiveEnabled=true`
+  - returns `403` Problem Details with:
+    - `type=https://api.freightflow.com/errors/feature-not-available`
+    - `title=Feature Not Available`
+    - safe detail text
+    - `featureKey` property
+
+Current denial-reason vocabulary:
+
+- `NONE`
+- `NO_SUBSCRIPTION`
+- `SUBSCRIPTION_SUSPENDED`
+- `INCONSISTENT_SUBSCRIPTION`
+- `FEATURE_NOT_GRANTED`
+- `FEATURE_NOT_EFFECTIVE`
+- `FEATURE_NOT_FOUND`
+
+Explicit non-scope in E1:
+
+- no enforcement yet for `/api/v1/client/rfqs/**`
+- no enforcement yet for quotations, shipments, reports, tracking, documents, or API access
+- no usage limits, counters, overrides, or billing mutation
+- no fallback to legacy `tenants.plan`
+
+Recommended activation path:
+
+1. Keep `DISABLED` in shared and demo environments while subscriptions are normalized.
+2. Configure real tenant subscriptions and validate plan grants through `/api/v1/platform/tenants/{tenantId}/entitlements`.
+3. Move to `AUDIT` and review denial candidates without operational breakage.
+4. Promote to `ENFORCE` only after tenants that must use internal RFQ are correctly subscribed.
+
 ## 2. Current State Proven by Code
 
 ### 2.1 Tenant and user identity

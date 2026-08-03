@@ -17,6 +17,7 @@ import com.freightflow.modules.commercial.rfq.enums.RfqServiceType;
 import com.freightflow.modules.commercial.rfq.enums.RfqStatus;
 import com.freightflow.modules.commercial.rfq.enums.RfqTransportMode;
 import com.freightflow.modules.commercial.shared.IncotermCode;
+import com.freightflow.modules.platform.entitlement.EntitlementEnforcementService;
 import com.freightflow.modules.customer.Customer;
 import com.freightflow.modules.customer.CustomerRepository;
 import com.freightflow.modules.port.Port;
@@ -43,6 +44,7 @@ import java.util.stream.Collectors;
 public class RfqService {
 
     private static final Logger log = LoggerFactory.getLogger(RfqService.class);
+    private static final String COMMERCIAL_RFQ_FEATURE_KEY = "COMMERCIAL_RFQ";
 
     private final RfqRepository rfqRepository;
     private final TenantRepository tenantRepository;
@@ -50,22 +52,26 @@ public class RfqService {
     private final UserRepository userRepository;
     private final PortRepository portRepository;
     private final QuotationRepository quotationRepository;
+    private final EntitlementEnforcementService entitlementEnforcementService;
 
     public RfqService(RfqRepository rfqRepository,
                       TenantRepository tenantRepository,
                       CustomerRepository customerRepository,
                       UserRepository userRepository,
                       PortRepository portRepository,
-                      QuotationRepository quotationRepository) {
+                      QuotationRepository quotationRepository,
+                      EntitlementEnforcementService entitlementEnforcementService) {
         this.rfqRepository = rfqRepository;
         this.tenantRepository = tenantRepository;
         this.customerRepository = customerRepository;
         this.userRepository = userRepository;
         this.portRepository = portRepository;
         this.quotationRepository = quotationRepository;
+        this.entitlementEnforcementService = entitlementEnforcementService;
     }
 
     public PageResponse<RfqSummaryResponse> list(UUID tenantId, RfqFilterParams filters, Pageable pageable) {
+        requireCommercialRfqEnabled(tenantId);
         var page = rfqRepository.findAll(buildSpec(tenantId, filters), pageable);
         Map<UUID, Long> quotationCounts = countQuotations(tenantId, page.getContent().stream().map(RequestForQuotation::getId).toList());
 
@@ -73,12 +79,14 @@ public class RfqService {
     }
 
     public RfqResponse getById(UUID id, UUID tenantId) {
+        requireCommercialRfqEnabled(tenantId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId);
         return RfqResponse.from(rfq, countQuotations(tenantId, List.of(rfq.getId())).getOrDefault(rfq.getId(), 0L));
     }
 
     @Transactional
     public RfqResponse create(CreateRfqRequest request, UUID tenantId, UUID userId) {
+        requireCommercialRfqEnabled(tenantId);
         log.info("Creating RFQ reference={} for tenant={}", request.reference(), tenantId);
 
         String reference = normalizeReference(request.reference());
@@ -118,6 +126,7 @@ public class RfqService {
 
     @Transactional
     public RfqResponse update(UUID id, UpdateRfqRequest request, UUID tenantId) {
+        requireCommercialRfqEnabled(tenantId);
         log.info("Updating RFQ id={} for tenant={}", id, tenantId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId);
         if (rfq.getStatus() != RfqStatus.DRAFT) {
@@ -151,6 +160,7 @@ public class RfqService {
 
     @Transactional
     public void delete(UUID id, UUID tenantId) {
+        requireCommercialRfqEnabled(tenantId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId);
         if (rfq.getStatus() != RfqStatus.DRAFT) {
             throw new BusinessException("Only RFQs in DRAFT can be deleted");
@@ -163,6 +173,7 @@ public class RfqService {
 
     @Transactional
     public RfqResponse submit(UUID id, UUID tenantId) {
+        requireCommercialRfqEnabled(tenantId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId);
         if (rfq.getStatus() == RfqStatus.CANCELLED || rfq.getStatus() == RfqStatus.EXPIRED) {
             throw new BusinessException("Cancelled or expired RFQ cannot be submitted");
@@ -178,6 +189,7 @@ public class RfqService {
 
     @Transactional
     public RfqResponse startAnalysis(UUID id, UUID tenantId) {
+        requireCommercialRfqEnabled(tenantId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId);
         if (rfq.getStatus() != RfqStatus.SUBMITTED) {
             throw new BusinessException("Only SUBMITTED RFQs can move to UNDER_ANALYSIS");
@@ -188,6 +200,7 @@ public class RfqService {
 
     @Transactional
     public RfqResponse cancel(UUID id, UUID tenantId) {
+        requireCommercialRfqEnabled(tenantId);
         RequestForQuotation rfq = getScopedRfq(id, tenantId);
         if (rfq.getStatus() == RfqStatus.CANCELLED || rfq.getStatus() == RfqStatus.EXPIRED) {
             throw new BusinessException("RFQ is already not actionable");
@@ -218,6 +231,10 @@ public class RfqService {
                 .and(hasDestination(filters.destinationPortId()))
                 .and(createdFrom(filters.createdFrom()))
                 .and(createdTo(filters.createdTo()));
+    }
+
+    private void requireCommercialRfqEnabled(UUID tenantId) {
+        entitlementEnforcementService.requireEnabled(tenantId, COMMERCIAL_RFQ_FEATURE_KEY);
     }
 
     private Specification<RequestForQuotation> hasTenant(UUID tenantId) {
