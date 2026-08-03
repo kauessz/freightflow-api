@@ -203,6 +203,39 @@ class EntitlementEnforcementServiceTest {
     }
 
     @Test
+    @DisplayName("inspectAllEmAuditNaoRegistraLogsNemLancaExcecao")
+    void inspectAllEmAuditNaoRegistraLogsNemLancaExcecao() {
+        properties.setEnforcementMode(EntitlementEnforcementMode.AUDIT);
+        when(tenantEntitlementResolverService.resolveTenantEntitlements(TENANT_ID))
+                .thenReturn(resolution(
+                        TenantEntitlementAccessStatus.ACTIVE,
+                        List.of(
+                                feature("COMMERCIAL_RFQ", false, false),
+                                feature("QUOTATION_WORKFLOW", true, false)
+                        )
+                ));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(EntitlementEnforcementService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            EntitlementBatchDecision decision = service.inspectAll(
+                    TENANT_ID,
+                    List.of("quotation_workflow", "commercial_rfq")
+            );
+
+            assertThat(decision.allowed()).isTrue();
+            assertThat(decision.allowedByRollout()).isTrue();
+            assertThat(decision.firstDeniedFeatureKey()).isEqualTo("COMMERCIAL_RFQ");
+            assertThat(appender.list).isEmpty();
+            verify(tenantEntitlementResolverService, times(1)).resolveTenantEntitlements(TENANT_ID);
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
     @DisplayName("enforceNegaSemSubscription")
     void enforceNegaSemSubscription() {
         properties.setEnforcementMode(EntitlementEnforcementMode.ENFORCE);

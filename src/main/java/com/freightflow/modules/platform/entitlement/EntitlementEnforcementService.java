@@ -37,7 +37,25 @@ public class EntitlementEnforcementService {
         return checkAll(tenantId, List.of(rawFeatureKey)).decisions().getFirst();
     }
 
+    public EntitlementDecision inspect(UUID tenantId, String rawFeatureKey) {
+        if (tenantId == null) {
+            throw new BadRequestException("Parameter 'tenantId' must not be null.");
+        }
+
+        return inspectAll(tenantId, List.of(rawFeatureKey)).decisions().getFirst();
+    }
+
+    public EntitlementBatchDecision inspectAll(UUID tenantId, Collection<String> rawFeatureKeys) {
+        return evaluateAll(tenantId, rawFeatureKeys, false);
+    }
+
     public EntitlementBatchDecision checkAll(UUID tenantId, Collection<String> rawFeatureKeys) {
+        return evaluateAll(tenantId, rawFeatureKeys, true);
+    }
+
+    private EntitlementBatchDecision evaluateAll(UUID tenantId,
+                                                 Collection<String> rawFeatureKeys,
+                                                 boolean emitAuditLogs) {
         if (tenantId == null) {
             throw new BadRequestException("Parameter 'tenantId' must not be null.");
         }
@@ -59,7 +77,7 @@ public class EntitlementEnforcementService {
                 .findFirst()
                 .orElse(null);
 
-        if (mode == EntitlementEnforcementMode.AUDIT) {
+        if (emitAuditLogs && mode == EntitlementEnforcementMode.AUDIT) {
             decisions.stream()
                     .filter(decision -> !decision.entitled())
                     .forEach(decision -> log.warn(

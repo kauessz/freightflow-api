@@ -1747,3 +1747,111 @@ Still out of scope after Phase D:
 - billing, checkout, invoicing, or payment providers
 - tenant self-service plan changes
 - portal or frontend implementation
+
+## Phase F1: operational tenant capabilities API
+
+Goal:
+
+- expose a tenant-safe operational capabilities endpoint for authenticated tenant users
+- let frontends hide or disable unavailable features without exposing platform administration details
+- keep the backend as the final authority; this endpoint is visual guidance only
+
+Endpoint introduced:
+
+- `GET /api/v1/me/capabilities`
+
+Security boundary:
+
+- allowed for tenant roles `ADMIN`, `OPERATOR`, `VIEWER`, and `CLIENT`
+- missing token returns `401`
+- platform token returns `401`
+- tenant scope comes only from `UserPrincipal`
+- the endpoint accepts no external `tenantId`, `customerId`, `planId`, or arbitrary feature keys
+
+Initial capability catalog exposed in F1:
+
+- `CLIENT_PORTAL`
+- `COMMERCIAL_RFQ`
+- `QUOTATION_WORKFLOW`
+
+The list is intentionally fixed in code for now and only includes features already connected to real runtime enforcement.
+Planned features, integer limits, usage counters, billing data, storage, API/webhook metadata, and raw platform diagnostics remain out of scope.
+
+Public response contract:
+
+```json
+{
+  "capabilities": [
+    {
+      "key": "CLIENT_PORTAL",
+      "available": true
+    },
+    {
+      "key": "COMMERCIAL_RFQ",
+      "available": true
+    },
+    {
+      "key": "QUOTATION_WORKFLOW",
+      "available": true
+    }
+  ],
+  "evaluatedAt": "2026-08-03T12:00:00Z"
+}
+```
+
+Contract rules:
+
+- deterministic ordering by `key`
+- `available` is never `null`
+- no JPA entities are exposed
+- the response must not expose:
+  - `tenantId`
+  - `customerId`
+  - `planId`
+  - `planCode`
+  - `subscriptionId`
+  - `subscriptionStatus`
+  - `accessStatus`
+  - `enforcementMode`
+  - `grantedByPlan`
+  - `effectiveEnabled`
+  - `allowedByRollout`
+  - `denialReason`
+  - `dependencies`
+  - `unmetDependencies`
+  - `warnings`
+  - `limits`
+  - platform-user data
+
+Semantics of `available`:
+
+- `DISABLED`
+  - all three capabilities return `available = true`
+  - tenants without subscriptions remain visually unblocked for compatibility
+- `AUDIT`
+  - all three capabilities return `available = true`
+  - rollout observation remains enabled without forcing frontend blocking
+- `ENFORCE`
+  - `available` mirrors the real runtime decision from entitlement enforcement
+  - `NO_SUBSCRIPTION` -> `false`
+  - `SUSPENDED` -> `false`
+  - `INCONSISTENT_SUBSCRIPTION` -> `false`
+  - missing plan grant -> `false`
+  - broken dependency -> `false`
+
+Audit-log rule for F1:
+
+- capability reads are not treated as operational attempts to execute RFQ or quotation workflows
+- the enforcement layer therefore needs a pure inspection path that:
+  - resolves entitlements once
+  - does not emit audit deny warnings
+  - does not throw `FeatureNotAvailableException`
+- blocking runtime paths continue to use the existing `check`/`require` semantics
+
+Compatibility note:
+
+- if `/api/v1/me/capabilities` returns `available = false`, the corresponding protected endpoint may still be called directly and remains the final authority
+- expected correspondence:
+  - `COMMERCIAL_RFQ = false` aligns with `403` on internal RFQ endpoints
+  - `CLIENT_PORTAL = false` aligns with `403` on client RFQ endpoints
+  - `QUOTATION_WORKFLOW = false` aligns with `403` on internal quotation workflow endpoints
